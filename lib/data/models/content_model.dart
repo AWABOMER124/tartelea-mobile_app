@@ -26,7 +26,7 @@ class ContentModel {
       description: json['description'],
       category: json['category'] ?? 'general',
       type: json['type'] ?? 'article',
-      url: json['url'],
+      url: json['media_url'] ?? json['url'],
       isSudanAwareness: json['is_sudan_awareness'] ?? false,
       createdAt: json['created_at'] != null 
           ? DateTime.tryParse(json['created_at']) 
@@ -41,7 +41,7 @@ class ContentModel {
       'description': description,
       'category': category,
       'type': type,
-      'url': url,
+      'media_url': url,
       'is_sudan_awareness': isSudanAwareness,
       'created_at': createdAt?.toIso8601String(),
     };

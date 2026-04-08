@@ -1,26 +1,27 @@
-import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/api_config.dart';
+import '../../core/api/api_payload.dart';
 import '../models/post_model.dart';
 
 class PostRepository {
-  final SupabaseClient _supabase;
+  final ApiClient _api;
 
-  PostRepository(this._supabase);
+  PostRepository(this._api);
 
   Future<List<PostModel>> getPosts({String? category}) async {
     try {
-      var query = _supabase.from('posts').select();
-      
-      if (category != null) {
-        query = query.eq('category', category);
-      }
+      final response = await _api.get(
+        ApiConfig.posts,
+        queryParameters: {
+          if (category != null && category.isNotEmpty) 'category': category,
+        },
+      );
 
-      final response = await query.order('created_at', ascending: false);
-      
-      return (response as List)
-          .map((json) => PostModel.fromJson(json))
-          .toList();
-    } catch (e) {
+      return ApiPayload.unwrapList(
+        response.data,
+        preferredKeys: const ['posts'],
+      ).map((json) => PostModel.fromJson(json)).toList();
+    } catch (_) {
       return [];
     }
   }
@@ -31,39 +32,30 @@ class PostRepository {
     required String category,
   }) async {
     try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) throw Exception('يجب تسجيل الدخول أولاً');
-
-      final response = await _supabase.from('posts').insert({
-        'author_id': user.id,
+      final response = await _api.post(ApiConfig.posts, data: {
         'title': title,
         'body': body,
         'category': category,
-      }).select().single();
+      });
 
-      return PostModel.fromJson(response);
-    } catch (e) {
+      return PostModel.fromJson(
+        ApiPayload.unwrapObject(
+          response.data,
+          preferredKeys: const ['post'],
+        ),
+      );
+    } catch (_) {
       return null;
     }
   }
 
   Future<void> likePost(String postId) async {
-    // Basic implementation for now
-    debugPrint('Liking post: $postId');
+    await _api.post('${ApiConfig.posts}/$postId/like');
   }
 
   Future<void> addComment(String postId, String text) async {
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) throw Exception('يجب تسجيل الدخول أولاً');
-
-      await _supabase.from('comments').insert({
-        'post_id': postId,
-        'user_id': user.id,
-        'content': text,
-      });
-    } catch (e) {
-      // Handle error
-    }
+    await _api.post('${ApiConfig.posts}/$postId/comment', data: {
+      'content': text,
+    });
   }
 }

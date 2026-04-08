@@ -1,35 +1,27 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/api_config.dart';
+import '../../core/api/api_payload.dart';
 import '../models/profile_model.dart';
 
 class ProfileRepository {
-  final SupabaseClient _supabase;
+  final ApiClient _api;
 
-  ProfileRepository(this._supabase);
+  ProfileRepository(this._api);
 
   Future<ProfileModel?> getProfile(String userId) async {
     try {
-      final response = await _supabase
-          .from('profiles')
-          .select()
-          .eq('id', userId)
-          .single();
-      
-      return ProfileModel.fromJson(response);
-    } catch (e) {
-      // Error handling
+      final response = await _api.get('${ApiConfig.profiles}$userId');
+      return ProfileModel.fromJson(ApiPayload.unwrapObject(response.data));
+    } catch (_) {
       return null;
     }
   }
 
   Future<bool> updateProfile(ProfileModel profile) async {
     try {
-      await _supabase
-          .from('profiles')
-          .update(profile.toJson())
-          .eq('id', profile.id);
+      await _api.put('${ApiConfig.profiles}${profile.id}', data: profile.toJson());
       return true;
-    } catch (e) {
-      // Error handling
+    } catch (_) {
       return false;
     }
   }

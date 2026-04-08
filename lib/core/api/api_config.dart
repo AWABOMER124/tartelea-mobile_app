@@ -1,8 +1,13 @@
 class ApiConfig {
-  static const String defaultBaseUrl = 'http://localhost:3000/api/v1';
+  static const String defaultBaseUrl =
+      'http://tartelea-backend-qfc3zc-c3d74b-72-62-41-242.traefik.me/api/v1';
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: defaultBaseUrl,
+  );
+  static const String livekitBaseUrl = String.fromEnvironment(
+    'LIVEKIT_API_BASE_URL',
+    defaultValue: baseUrl,
   );
   static const String googleServerClientId = String.fromEnvironment(
     'GOOGLE_SERVER_CLIENT_ID',

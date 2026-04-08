@@ -1,46 +1,40 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/api/api_client.dart';
+import '../../core/api/api_config.dart';
+import '../../core/api/api_payload.dart';
 import '../models/content_model.dart';
 
 class ContentRepository {
-  final SupabaseClient _supabase;
+  final ApiClient _api;
 
-  ContentRepository(this._supabase);
+  ContentRepository(this._api);
 
   Future<List<ContentModel>> getContents({
     String? category,
     bool? isSudanAwareness,
   }) async {
     try {
-      var query = _supabase.from('contents').select();
+      final response = await _api.get(
+        ApiConfig.contents,
+        queryParameters: {
+          if (category != null && category.isNotEmpty) 'category': category,
+          if (isSudanAwareness != null)
+            'is_sudan_awareness': isSudanAwareness,
+        },
+      );
 
-      if (category != null) {
-        query = query.eq('category', category);
-      }
-      if (isSudanAwareness != null) {
-        query = query.eq('is_sudan_awareness', isSudanAwareness);
-      }
-
-      final response = await query.order('created_at', ascending: false);
-      
-      return (response as List)
+      return ApiPayload.unwrapList(response.data)
           .map((json) => ContentModel.fromJson(json))
           .toList();
-    } catch (e) {
-      // Return empty list on error
+    } catch (_) {
       return [];
     }
   }
 
   Future<ContentModel?> getContentById(String id) async {
     try {
-      final response = await _supabase
-          .from('contents')
-          .select()
-          .eq('id', id)
-          .single();
-      
-      return ContentModel.fromJson(response);
-    } catch (e) {
+      final response = await _api.get('${ApiConfig.contentDetail}$id');
+      return ContentModel.fromJson(ApiPayload.unwrapObject(response.data));
+    } catch (_) {
       return null;
     }
   }
