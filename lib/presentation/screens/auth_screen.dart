@@ -76,7 +76,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         }
       }
     } catch (error) {
-      _showMessage(_errorMessage(error));
+      _handleAuthFailure(error);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -104,7 +104,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         context.go('/');
       }
     } catch (error) {
-      _showMessage(_errorMessage(error));
+      _handleAuthFailure(error);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -123,7 +123,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         context.go('/');
       }
     } catch (error) {
-      _showMessage(_errorMessage(error));
+      _handleAuthFailure(error);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -138,6 +138,92 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  void _handleAuthFailure(Object error) {
+    if (_requiresVerification(error) && mounted) {
+      setState(() => _needsVerification = true);
+    }
+    _showMessage(_mappedErrorMessage(error));
+  }
+
+  String _mappedErrorMessage(Object error) {
+    final code = _errorCode(error);
+    final rawMessage = _backendMessage(error);
+
+    switch (code) {
+      case 'EMAIL_ALREADY_REGISTERED':
+        return 'هذا البريد مسجل بالفعل.';
+      case 'GOOGLE_SIGN_IN_REQUIRED':
+        return 'هذا الحساب مرتبط بتسجيل الدخول عبر Google. استخدم زر Google للمتابعة.';
+      case 'EMAIL_NOT_VERIFIED':
+        return 'الحساب غير مفعّل بعد. أعدنا إرسال رمز التحقق إلى بريدك الإلكتروني.';
+      case 'INVALID_CREDENTIALS':
+        return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+      case 'INVALID_VERIFICATION_CODE':
+        return 'رمز التحقق غير صحيح أو منتهي الصلاحية.';
+      case 'EMAIL_NOT_FOUND':
+        return 'لا يوجد حساب مرتبط بهذا البريد الإلكتروني.';
+    }
+
+    switch (rawMessage) {
+      case 'Email already registered':
+        return 'هذا البريد مسجل بالفعل.';
+      case 'This email is already linked to Google sign-in. Please continue with Google.':
+      case 'This account uses Google sign-in. Please continue with Google.':
+        return 'هذا الحساب مرتبط بتسجيل الدخول عبر Google. استخدم زر Google للمتابعة.';
+      case 'Please verify your email first. A new verification code has been sent.':
+      case 'Please verify your email before resetting the password. A new verification code has been sent.':
+        return 'الحساب غير مفعّل بعد. أعدنا إرسال رمز التحقق إلى بريدك الإلكتروني.';
+      case 'Invalid email or password':
+        return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+      case 'Invalid or expired verification code':
+        return 'رمز التحقق غير صحيح أو منتهي الصلاحية.';
+      case 'Email not found':
+        return 'لا يوجد حساب مرتبط بهذا البريد الإلكتروني.';
+    }
+
+    return _errorMessage(error);
+  }
+
+  bool _requiresVerification(Object error) {
+    final code = _errorCode(error);
+    if (code == 'EMAIL_NOT_VERIFIED') {
+      return true;
+    }
+
+    final message = _backendMessage(error);
+    return message == 'Please verify your email first. A new verification code has been sent.' ||
+        message == 'Please verify your email before resetting the password. A new verification code has been sent.';
+  }
+
+  String? _errorCode(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map<String, dynamic>) {
+        final directCode = data['code'];
+        if (directCode != null) {
+          return directCode.toString();
+        }
+
+        final nestedError = data['error'];
+        if (nestedError is Map<String, dynamic> && nestedError['code'] != null) {
+          return nestedError['code'].toString();
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _backendMessage(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map<String, dynamic>) {
+        return (data['message'] ?? data['error']?['message'])?.toString();
+      }
+      return error.message;
+    }
+    return error.toString().replaceFirst('Exception: ', '');
   }
 
   String _errorMessage(Object error) {

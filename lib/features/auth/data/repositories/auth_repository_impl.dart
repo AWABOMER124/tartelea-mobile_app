@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/api/api_client.dart';
@@ -18,7 +19,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<AuthResult> signIn({required String email, required String password}) async {
     final response = await _api.post(ApiConfig.login, data: {
-      'email': email,
+      'email': _normalizeEmail(email),
       'password': password,
     });
 
@@ -34,7 +35,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> signUp({required String email, required String password, String? fullName}) async {
     await _api.post(ApiConfig.signup, data: {
-      'email': email,
+      'email': _normalizeEmail(email),
       'password': password,
       'full_name': fullName,
     });
@@ -46,7 +47,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String code,
   }) async {
     final response = await _api.post(ApiConfig.verifyEmail, data: {
-      'email': email,
+      'email': _normalizeEmail(email),
       'code': code,
     });
 
@@ -98,7 +99,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> resetPassword(String email) async {
-    await _api.post(ApiConfig.forgotPassword, data: {'email': email});
+    await _api.post(ApiConfig.forgotPassword, data: {'email': _normalizeEmail(email)});
   }
 
   @override
@@ -111,6 +112,12 @@ class AuthRepositoryImpl implements AuthRepository {
       return _mapResponseToUser(
         ApiPayload.unwrapObject(response.data, preferredKeys: const ['user']),
       );
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 401 || statusCode == 403) {
+        await signOut();
+      }
+      return null;
     } catch (_) {
       return null;
     }
@@ -128,6 +135,10 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> _saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
+  }
+
+  static String _normalizeEmail(String value) {
+    return value.trim().toLowerCase();
   }
 
   AppUser _mapResponseToUser(Map<String, dynamic> json) {
