@@ -31,7 +31,7 @@ class CommonAppBar extends ConsumerWidget implements PreferredSizeWidget {
               ),
             )
           : Image.asset(
-              'assets/images/logo.png', // Fallback to logo if no title
+              'assets/images/logo.jpeg',
               height: 40,
               errorBuilder: (context, _, __) => const Text(
                 'Tartelea',

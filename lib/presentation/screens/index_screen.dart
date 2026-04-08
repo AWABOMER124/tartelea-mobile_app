@@ -89,9 +89,8 @@ class IndexScreen extends ConsumerWidget {
                   spreadRadius: 5,
                 ),
               ],
-              // Note: Make sure logo.jpg exists in assets/images/
               image: const DecorationImage(
-                image: AssetImage('assets/images/logo.jpg'),
+                image: AssetImage('assets/images/logo.jpeg'),
                 fit: BoxFit.cover,
               ),
               border: Border.all(color: AppColors.secondary.withAlpha(127), width: 2),

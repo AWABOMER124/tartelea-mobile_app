@@ -152,7 +152,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
                   image: const DecorationImage(
-                    image: AssetImage('assets/images/logo.jpg'),
+                    image: AssetImage('assets/images/logo.jpeg'),
                     fit: BoxFit.cover,
                   ),
                   boxShadow: [

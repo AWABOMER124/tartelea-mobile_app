@@ -16,17 +16,17 @@ class _PromoBannerState extends State<PromoBanner> {
     {
       'title': 'دورة التجويد الجديدة',
       'subtitle': 'انضم الآن لإتقان تلاوة القرآن الكريم',
-      'image': 'assets/images/placeholder.png',
+      'image': 'assets/images/logo.jpeg',
     },
     {
       'title': 'ورشة العمل القادمة',
       'subtitle': 'مناقشة حية حول التزكية والروحانية',
-      'image': 'assets/images/placeholder.png',
+      'image': 'assets/images/logo.jpeg',
     },
     {
       'title': 'مكتبة ترتيل المتجددة',
       'subtitle': 'تصفح أحدث الكتب والمقالات الصوتية',
-      'image': 'assets/images/placeholder.png',
+      'image': 'assets/images/logo.jpeg',
     },
   ];
 
