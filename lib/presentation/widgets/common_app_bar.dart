@@ -20,22 +20,35 @@ class CommonAppBar extends ConsumerWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = ref.watch(themeProvider) == ThemeMode.dark;
+    final foreground = AppColors.appBarForeground(isDark);
 
     return AppBar(
-      title: title != null 
+      title: title != null
           ? Text(
               title!,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : AppColors.primary,
+                color: foreground,
               ),
             )
-          : Image.asset(
-              'assets/images/logo.jpeg',
-              height: 40,
-              errorBuilder: (context, _, __) => const Text(
-                'Tartelea',
-                style: TextStyle(fontWeight: FontWeight.bold),
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.panelColor(isDark),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.borderColor(isDark)),
+              ),
+              child: Image.asset(
+                'assets/images/logo.jpeg',
+                height: 34,
+                fit: BoxFit.contain,
+                errorBuilder: (context, _, __) => Text(
+                  'Tartelea',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: foreground,
+                  ),
+                ),
               ),
             ),
       centerTitle: centerTitle,
@@ -43,7 +56,7 @@ class CommonAppBar extends ConsumerWidget implements PreferredSizeWidget {
       elevation: 0,
       actions: actions,
       iconTheme: IconThemeData(
-        color: isDark ? Colors.white : AppColors.primary,
+        color: foreground,
       ),
     );
   }

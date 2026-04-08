@@ -4,6 +4,11 @@ class ApiConfig {
     'API_BASE_URL',
     defaultValue: defaultBaseUrl,
   );
+  static const String googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+    defaultValue:
+        '199107182598-d9b1anek3f57ij2427c14h8d05blfg3e.apps.googleusercontent.com',
+  );
 
   // Auth endpoints
   static const String login = '/auth/login';

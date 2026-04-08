@@ -41,8 +41,30 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<AuthResult> verifyEmail({
+    required String email,
+    required String code,
+  }) async {
+    final response = await _api.post(ApiConfig.verifyEmail, data: {
+      'email': email,
+      'code': code,
+    });
+
+    final token = response.data['token'] as String;
+    await _saveToken(token);
+
+    final user = _mapResponseToUser(response.data);
+    _authStateController.add(user);
+
+    return AuthResult(token: token, user: user);
+  }
+
+  @override
   Future<AuthResult> signInWithGoogle() async {
-    final googleSignIn = GoogleSignIn();
+    final googleSignIn = GoogleSignIn(
+      serverClientId:
+          ApiConfig.googleServerClientId.isEmpty ? null : ApiConfig.googleServerClientId,
+    );
     final googleUser = await googleSignIn.signIn();
     if (googleUser == null) {
       throw Exception('تم إلغاء عملية تسجيل الدخول');

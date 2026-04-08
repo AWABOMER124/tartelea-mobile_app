@@ -2,23 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'core/theme/app_colors.dart';
-import 'core/constants/supabase_config.dart';
+
 import 'core/api/api_provider.dart';
+import 'core/constants/supabase_config.dart';
+import 'core/theme/app_theme.dart';
 import 'presentation/providers/theme_provider.dart';
-import 'presentation/screens/home_screen.dart';
-import 'presentation/screens/auth_screen.dart';
-import 'presentation/screens/library_screen.dart';
-import 'presentation/screens/community_screen.dart';
-import 'presentation/screens/pricing_screen.dart';
+import 'presentation/screens/audio_room_detail_screen.dart';
 import 'presentation/screens/audio_rooms_screen.dart';
+import 'presentation/screens/auth_screen.dart';
+import 'presentation/screens/community_screen.dart';
+import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/library_screen.dart';
+import 'presentation/screens/pricing_screen.dart';
+import 'presentation/screens/workshops_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final prefs = await SharedPreferences.getInstance();
 
-  // Initialize Supabase for Edge Functions
   await SupabaseConfig.initialize();
 
   runApp(
@@ -47,12 +49,24 @@ final _router = GoRouter(
       builder: (context, state) => const PricingScreen(),
     ),
     GoRoute(
+      path: '/workshops',
+      builder: (context, state) => const WorkshopsScreen(),
+    ),
+    GoRoute(
       path: '/audio-rooms',
       builder: (context, state) => const AudioRoomsScreen(),
     ),
     GoRoute(
+      path: '/audio-room/:id',
+      builder: (context, state) => AudioRoomDetailScreen(
+        roomId: state.pathParameters['id'] ?? '',
+      ),
+    ),
+    GoRoute(
       path: '/library',
-      builder: (context, state) => const LibraryScreen(),
+      builder: (context, state) => LibraryScreen(
+        initialSidebarCategory: state.extra as String?,
+      ),
     ),
     GoRoute(
       path: '/community',
@@ -67,29 +81,18 @@ class TarteleaApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
-    
+
     return MaterialApp.router(
       title: 'Tartelea',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primaryColor: AppColors.primary,
-        scaffoldBackgroundColor: AppColors.background,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.primary,
-          secondary: AppColors.secondary,
-          surface: Colors.white,
-        ),
-      ),
-      darkTheme: ThemeData.dark().copyWith(
-        primaryColor: AppColors.primary,
-        scaffoldBackgroundColor: AppColors.darkBackground,
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       routerConfig: _router,
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
-          child: child!,
+          child: child ?? const SizedBox.shrink(),
         );
       },
     );

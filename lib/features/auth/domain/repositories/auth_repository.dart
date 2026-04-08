@@ -10,6 +10,7 @@ class AuthResult {
 abstract class AuthRepository {
   Future<AuthResult> signIn({required String email, required String password});
   Future<void> signUp({required String email, required String password, String? fullName});
+  Future<AuthResult> verifyEmail({required String email, required String code});
   Future<AuthResult> signInWithGoogle();
   Future<void> signOut();
   Future<void> resetPassword(String email);

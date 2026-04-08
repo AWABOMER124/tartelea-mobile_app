@@ -19,40 +19,40 @@ class AudioRoomsScreen extends ConsumerWidget {
     final roomsAsync = ref.watch(liveAudioRoomsProvider);
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
       appBar: CommonAppBar(
+        title: 'الغرف الصوتية',
+        transparent: true,
         actions: [
           if (isAuthorized)
             IconButton(
               icon: Icon(
-                Icons.add_circle_outline,
-                color: isDark ? Colors.white : AppColors.primary,
+                Icons.add_circle_outline_rounded,
+                color: AppColors.appBarForeground(isDark),
               ),
               onPressed: () {},
             ),
           IconButton(
-            icon: const Icon(
-              Icons.stars,
-              color: AppColors.accent,
-            ),
+            icon: const Icon(Icons.stars_rounded, color: AppColors.accent),
             onPressed: () => context.push('/pricing'),
           ),
         ],
       ),
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [AppColors.darkBackground, AppColors.darkSurface]
-                : [Colors.white, AppColors.secondary.withAlpha(51)],
-          ),
+          gradient: AppColors.screenGradient(isDark),
         ),
         child: Column(
           children: [
-            const SizedBox(height: 100),
-            _buildLiveIndicator(isDark),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
+              child: Column(
+                children: [
+                  _buildLiveIndicator(isDark),
+                  const SizedBox(height: 12),
+                  _buildInfoPanel(isDark),
+                ],
+              ),
+            ),
             Expanded(
               child: roomsAsync.when(
                 data: (rooms) {
@@ -63,19 +63,19 @@ class AudioRoomsScreen extends ConsumerWidget {
                   return RefreshIndicator(
                     onRefresh: () => ref.refresh(liveAudioRoomsProvider.future),
                     child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.fromLTRB(18, 6, 18, 24),
                       itemCount: rooms.length,
-                      itemBuilder: (context, index) {
-                        return _RoomCard(
-                          room: rooms[index],
-                          isDark: isDark,
-                        );
-                      },
+                      itemBuilder: (context, index) => _RoomCard(
+                        room: rooms[index],
+                        isDark: isDark,
+                      ),
                     ),
                   );
                 },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(),
+                loading: () => Center(
+                  child: CircularProgressIndicator(
+                    color: isDark ? AppColors.darkPrimary : AppColors.primary,
+                  ),
                 ),
                 error: (_, __) => _AudioRoomsErrorState(
                   isDark: isDark,
@@ -91,25 +91,21 @@ class AudioRoomsScreen extends ConsumerWidget {
 
   Widget _buildLiveIndicator(bool isDark) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(12),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withAlpha(25)
-            : AppColors.secondary.withAlpha(127),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white.withAlpha(51) : AppColors.secondary,
-        ),
+        color: AppColors.panelColor(isDark),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.borderColor(isDark)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 8,
-            height: 8,
+            width: 10,
+            height: 10,
             decoration: const BoxDecoration(
-              color: Colors.red,
+              color: Colors.redAccent,
               shape: BoxShape.circle,
             ),
           ),
@@ -119,7 +115,40 @@ class AudioRoomsScreen extends ConsumerWidget {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
-              color: isDark ? Colors.white : AppColors.primary,
+              color: AppColors.textPrimary(isDark),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoPanel(bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: AppColors.heroGradient(isDark),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'جلسات مباشرة بهوية المدرسة',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'استكشف الغرف المتاحة وتابع المستمعين والمضيفين قبل الانضمام.',
+            style: TextStyle(
+              color: Colors.white.withAlpha(222),
+              fontSize: 13,
+              height: 1.6,
             ),
           ),
         ],
@@ -144,7 +173,7 @@ class _AudioRoomsEmptyState extends StatelessWidget {
             Icon(
               Icons.mic_none_rounded,
               size: 48,
-              color: isDark ? Colors.white70 : AppColors.primary.withAlpha(180),
+              color: AppColors.appBarForeground(isDark).withAlpha(180),
             ),
             const SizedBox(height: 12),
             Text(
@@ -152,16 +181,14 @@ class _AudioRoomsEmptyState extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : AppColors.foreground,
+                color: AppColors.textPrimary(isDark),
               ),
             ),
             const SizedBox(height: 8),
             Text(
               'عند بدء غرفة جديدة ستظهر هنا مباشرة.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isDark ? Colors.white70 : AppColors.mutedForeground,
-              ),
+              style: TextStyle(color: AppColors.textSecondary(isDark)),
             ),
           ],
         ),
@@ -190,7 +217,7 @@ class _AudioRoomsErrorState extends StatelessWidget {
             Icon(
               Icons.wifi_off_rounded,
               size: 48,
-              color: isDark ? Colors.white70 : AppColors.primary.withAlpha(180),
+              color: AppColors.appBarForeground(isDark).withAlpha(180),
             ),
             const SizedBox(height: 12),
             Text(
@@ -198,7 +225,7 @@ class _AudioRoomsErrorState extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : AppColors.foreground,
+                color: AppColors.textPrimary(isDark),
               ),
             ),
             const SizedBox(height: 12),
@@ -224,37 +251,43 @@ class _RoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: isDark ? 0 : 2,
-      shadowColor: Colors.black.withAlpha(25),
-      color: isDark ? AppColors.darkCard : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(
-          color: isDark
-              ? Colors.white.withAlpha(51)
-              : AppColors.secondary.withAlpha(127),
-        ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: AppColors.panelColor(isDark),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: AppColors.borderColor(isDark)),
       ),
       child: InkWell(
         onTap: () => context.push('/audio-room/${room.id}'),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(26),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Text('LIVE', style: TextStyle(fontSize: 12)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withAlpha(30),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text(
+                      'LIVE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'غرفة نشطة',
                     style: TextStyle(
-                      color: isDark
-                          ? Colors.white.withAlpha(179)
-                          : AppColors.mutedForeground,
+                      color: AppColors.textSecondary(isDark),
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
@@ -267,7 +300,7 @@ class _RoomCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : AppColors.foreground,
+                  color: AppColors.textPrimary(isDark),
                 ),
               ),
               if (room.description.trim().isNotEmpty) ...[
@@ -277,13 +310,12 @@ class _RoomCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: isDark
-                        ? Colors.white.withAlpha(180)
-                        : AppColors.mutedForeground,
+                    color: AppColors.textSecondary(isDark),
+                    height: 1.5,
                   ),
                 ),
               ],
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   _AvatarStack(isDark: isDark),
@@ -295,16 +327,14 @@ class _RoomCard extends StatelessWidget {
                         Text(
                           room.hostName,
                           style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: isDark ? Colors.white : AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.appBarForeground(isDark),
                           ),
                         ),
                         Text(
-                          '${room.listenerCount} مستمع حاليًا',
+                          '${room.listenerCount} مستمع حالياً',
                           style: TextStyle(
-                            color: isDark
-                                ? Colors.white.withAlpha(153)
-                                : AppColors.mutedForeground,
+                            color: AppColors.textSecondary(isDark),
                             fontSize: 12,
                           ),
                         ),
@@ -312,10 +342,8 @@ class _RoomCard extends StatelessWidget {
                     ),
                   ),
                   Icon(
-                    Icons.chevron_left,
-                    color: isDark
-                        ? Colors.white38
-                        : AppColors.primary.withAlpha(127),
+                    Icons.chevron_left_rounded,
+                    color: AppColors.appBarForeground(isDark),
                   ),
                 ],
               ),
@@ -343,12 +371,11 @@ class _AvatarStack extends StatelessWidget {
             left: 0,
             child: CircleAvatar(
               radius: 18,
-              backgroundColor:
-                  isDark ? AppColors.primary : AppColors.secondary,
+              backgroundColor: AppColors.subtleFill(isDark),
               child: Icon(
-                Icons.person,
+                Icons.person_rounded,
                 size: 20,
-                color: isDark ? Colors.white : AppColors.primary,
+                color: AppColors.appBarForeground(isDark),
               ),
             ),
           ),
@@ -356,11 +383,11 @@ class _AvatarStack extends StatelessWidget {
             left: 20,
             child: CircleAvatar(
               radius: 18,
-              backgroundColor: AppColors.accent,
+              backgroundColor: isDark ? AppColors.darkPrimary : AppColors.accentSoft,
               child: Icon(
-                Icons.person,
+                Icons.person_rounded,
                 size: 20,
-                color: isDark ? Colors.white : AppColors.primary,
+                color: AppColors.accentForeground(isDark),
               ),
             ),
           ),

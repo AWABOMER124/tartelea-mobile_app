@@ -1,9 +1,13 @@
+import 'dart:ui';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/auth_provider.dart';
-import '../../core/theme/app_colors.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:ui';
+
+import '../../core/theme/app_colors.dart';
+import '../providers/auth_provider.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -13,87 +17,187 @@ class AuthScreen extends ConsumerStatefulWidget {
 }
 
 class _AuthScreenState extends ConsumerState<AuthScreen> {
+  final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _verificationCodeController = TextEditingController();
+
   bool _isLoading = false;
   bool _isLogin = true;
   bool _needsVerification = false;
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _verificationCodeController.dispose();
+    super.dispose();
+  }
 
   Future<void> _submit() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) return;
-    
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final fullName = _fullNameController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      _showMessage('يرجى تعبئة البريد الإلكتروني وكلمة المرور.');
+      return;
+    }
+
+    if (!_isLogin && fullName.length < 2) {
+      _showMessage('يرجى إدخال الاسم الكامل كما سيظهر في الحساب.');
+      return;
+    }
+
     setState(() => _isLoading = true);
+
     try {
       if (_isLogin) {
         await ref.read(authRepositoryProvider).signIn(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+              email: email,
+              password: password,
+            );
+        ref.invalidate(authTokenProvider);
+        ref.invalidate(profileProvider);
+        if (mounted) {
+          context.go('/');
+        }
       } else {
         await ref.read(authRepositoryProvider).signUp(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
-        setState(() => _needsVerification = true);
+              email: email,
+              password: password,
+              fullName: fullName,
+            );
+        if (mounted) {
+          setState(() => _needsVerification = true);
+          _showMessage('تم إرسال رمز التحقق إلى بريدك الإلكتروني.');
+        }
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: ${e.toString()}')),
-        );
-      }
+    } catch (error) {
+      _showMessage(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _verifyEmail() async {
+    final code = _verificationCodeController.text.trim();
+    if (code.length != 6) {
+      _showMessage('أدخل رمز التحقق المكوّن من 6 أرقام.');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await ref.read(authRepositoryProvider).verifyEmail(
+            email: _emailController.text.trim(),
+            code: code,
+          );
+      ref.invalidate(authTokenProvider);
+      ref.invalidate(profileProvider);
+      if (mounted) {
+        context.go('/');
+      }
+    } catch (error) {
+      _showMessage(_errorMessage(error));
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
+
     try {
       await ref.read(authRepositoryProvider).signInWithGoogle();
-    } catch (e) {
+      ref.invalidate(authTokenProvider);
+      ref.invalidate(profileProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: ${e.toString()}')),
-        );
+        context.go('/');
       }
+    } catch (error) {
+      _showMessage(_errorMessage(error));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  String _errorMessage(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map<String, dynamic>) {
+        return (data['message'] ?? data['error']?['message'] ?? 'تعذر إكمال الطلب.')
+            .toString();
+      }
+      return error.message ?? 'تعذر إكمال الطلب.';
+    }
+    return error.toString().replaceFirst('Exception: ', '');
+  }
+
+  void _toggleMode() {
+    setState(() {
+      _isLogin = !_isLogin;
+      _needsVerification = false;
+      _verificationCodeController.clear();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.primary, Color(0xFF1B4332)],
-          ),
+        decoration: BoxDecoration(
+          gradient: AppColors.screenGradient(isDark),
         ),
         child: Stack(
           children: [
             Positioned(
-              top: -100,
-              right: -100,
-              child: Container(
-                width: 300,
-                height: 300,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withAlpha(25),
-                ),
+              top: -90,
+              left: -70,
+              child: _GlowOrb(
+                size: 220,
+                color: (isDark ? AppColors.darkPrimary : AppColors.accentSoft)
+                    .withAlpha(70),
+              ),
+            ),
+            Positioned(
+              bottom: -110,
+              right: -70,
+              child: _GlowOrb(
+                size: 260,
+                color: AppColors.spiritualGreen.withAlpha(isDark ? 90 : 55),
               ),
             ),
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(32.0),
-                  child: _needsVerification ? _buildVerificationState() : _buildAuthForm(),
+                  padding: const EdgeInsets.all(24),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 460),
+                    child: _buildCard(context, isDark),
+                  ),
                 ),
               ),
             ),
@@ -103,140 +207,262 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     );
   }
 
-  Widget _buildVerificationState() {
+  Widget _buildCard(BuildContext context, bool isDark) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(34),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: AppColors.panelColor(isDark),
+            borderRadius: BorderRadius.circular(34),
+            border: Border.all(color: AppColors.borderColor(isDark)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(isDark ? 34 : 14),
+                blurRadius: 28,
+                offset: const Offset(0, 18),
+              ),
+            ],
+          ),
+          child: _needsVerification
+              ? _buildVerificationState(context, isDark)
+              : _buildAuthForm(context, isDark),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVerificationState(BuildContext context, bool isDark) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.mark_email_read_outlined, size: 80, color: AppColors.secondary),
+        _buildLogo(isDark, size: 92),
         const SizedBox(height: 24),
         Text(
           'تأكيد الحساب',
-          style: GoogleFonts.cairo(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'تم إرسال رابط تأكيد إلى بريدك الإلكتروني. يرجى تفعيل الحساب لتتمكن من الدخول.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white70, fontSize: 16),
-        ),
-        const SizedBox(height: 32),
-        ElevatedButton(
-          onPressed: () => setState(() => _needsVerification = false),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.secondary,
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+          style: GoogleFonts.cairo(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary(isDark),
           ),
-          child: const Text('العودة لتسجيل الدخول'),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'أرسلنا رمز التحقق إلى ${_emailController.text.trim()} لإتمام إنشاء الحساب.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textSecondary(isDark),
+            fontSize: 15,
+            height: 1.6,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _buildTextField(
+          controller: _verificationCodeController,
+          label: 'رمز التحقق',
+          icon: Icons.verified_user_outlined,
+          keyboardType: TextInputType.number,
+          isDark: isDark,
+        ),
+        const SizedBox(height: 18),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isLoading ? null : _verifyEmail,
+            child: _isLoading
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: AppColors.accentForeground(isDark),
+                    ),
+                  )
+                : const Text('تفعيل الحساب'),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextButton(
+          onPressed: _isLoading
+              ? null
+              : () => setState(() {
+                    _needsVerification = false;
+                    _verificationCodeController.clear();
+                    _isLogin = true;
+                  }),
+          child: Text(
+            'العودة لتسجيل الدخول',
+            style: TextStyle(color: AppColors.appBarForeground(isDark)),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildAuthForm() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(32),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(25),
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: Colors.white.withAlpha(51)),
+  Widget _buildAuthForm(BuildContext context, bool isDark) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Align(
+          alignment: Alignment.topLeft,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.subtleFill(isDark),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: IconButton(
+              onPressed: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/');
+                }
+              },
+              icon: Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: AppColors.appBarForeground(isDark),
+                size: 18,
+              ),
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  image: const DecorationImage(
-                    image: AssetImage('assets/images/logo.jpeg'),
-                    fit: BoxFit.cover,
-                  ),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withAlpha(76), blurRadius: 10, spreadRadius: 2),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-              Text(
-                _isLogin ? 'مرحباً بك مجدداً' : 'إنشاء حساب جديد',
-                style: GoogleFonts.cairo(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 32),
-              _buildTextField(
-                controller: _emailController,
-                label: 'البريد الإلكتروني',
-                icon: Icons.email_outlined,
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: _passwordController,
-                label: 'كلمة المرور',
-                icon: Icons.lock_outline,
-                isPassword: true,
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.secondary,
-                    foregroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 5,
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: AppColors.primary)
-                      : Text(
-                          _isLogin ? 'دخول' : 'تسجيل',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  const Expanded(child: Divider(color: Colors.white24)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('أو عبر', style: TextStyle(color: Colors.white.withAlpha(127), fontSize: 12)),
-                  ),
-                  const Expanded(child: Divider(color: Colors.white24)),
-                ],
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _signInWithGoogle,
-                  icon: const Icon(Icons.g_mobiledata, color: Colors.white, size: 32),
-                  label: const Text('تسجيل الدخول باستخدام Google', style: TextStyle(color: Colors.white)),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.white.withAlpha(76)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              TextButton(
-                onPressed: () => setState(() => _isLogin = !_isLogin),
-                child: Text(
-                  _isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ سجل دخولك',
-                  style: const TextStyle(color: AppColors.secondary),
-                ),
-              ),
-            ],
+        ),
+        const SizedBox(height: 8),
+        _buildLogo(isDark),
+        const SizedBox(height: 24),
+        Text(
+          _isLogin ? 'مرحباً بك مجدداً' : 'إنشاء حساب جديد',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cairo(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary(isDark),
           ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          _isLogin
+              ? 'سجل دخولك للمتابعة إلى مكتبتك وغرفك الصوتية وورشك التعليمية.'
+              : 'أنشئ حسابك بهوية المدرسة نفسها وابدأ رحلتك داخل المنصة.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textSecondary(isDark),
+            fontSize: 14,
+            height: 1.6,
+          ),
+        ),
+        const SizedBox(height: 28),
+        if (!_isLogin) ...[
+          _buildTextField(
+            controller: _fullNameController,
+            label: 'الاسم الكامل',
+            icon: Icons.badge_outlined,
+            isDark: isDark,
+          ),
+          const SizedBox(height: 14),
+        ],
+        _buildTextField(
+          controller: _emailController,
+          label: 'البريد الإلكتروني',
+          icon: Icons.email_outlined,
+          keyboardType: TextInputType.emailAddress,
+          isDark: isDark,
+        ),
+        const SizedBox(height: 14),
+        _buildTextField(
+          controller: _passwordController,
+          label: 'كلمة المرور',
+          icon: Icons.lock_outline_rounded,
+          isPassword: true,
+          isDark: isDark,
+        ),
+        const SizedBox(height: 22),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isLoading ? null : _submit,
+            child: _isLoading
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: AppColors.accentForeground(isDark),
+                    ),
+                  )
+                : Text(_isLogin ? 'دخول' : 'تسجيل'),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(child: Divider(color: AppColors.borderColor(isDark))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'أو عبر',
+                style: TextStyle(
+                  color: AppColors.textSecondary(isDark),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            Expanded(child: Divider(color: AppColors.borderColor(isDark))),
+          ],
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isLoading ? null : _signInWithGoogle,
+            icon: Icon(
+              Icons.g_mobiledata_rounded,
+              size: 28,
+              color: AppColors.appBarForeground(isDark),
+            ),
+            label: Text(
+              'تسجيل الدخول باستخدام Google',
+              style: TextStyle(color: AppColors.textPrimary(isDark)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        TextButton(
+          onPressed: _isLoading ? null : _toggleMode,
+          child: Text(
+            _isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ سجل دخولك',
+            style: TextStyle(
+              color: AppColors.appBarForeground(isDark),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLogo(bool isDark, {double size = 110}) {
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: AppColors.heroGradient(isDark),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withAlpha(isDark ? 70 : 40),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Image.asset(
+          'assets/images/logo.jpeg',
+          fit: BoxFit.cover,
         ),
       ),
     );
@@ -246,25 +472,57 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     required TextEditingController controller,
     required String label,
     required IconData icon,
+    required bool isDark,
     bool isPassword = false,
+    TextInputType keyboardType = TextInputType.text,
   }) {
     return TextField(
       controller: controller,
-      obscureText: isPassword,
-      style: const TextStyle(color: Colors.white),
+      obscureText: isPassword ? _obscurePassword : false,
+      keyboardType: keyboardType,
+      style: TextStyle(color: AppColors.textPrimary(isDark)),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withAlpha(153)),
-        prefixIcon: Icon(icon, color: AppColors.secondary.withAlpha(204)),
-        filled: true,
-        fillColor: Colors.white.withAlpha(13),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.secondary, width: 1.5),
+        prefixIcon: Icon(icon, color: AppColors.appBarForeground(isDark)),
+        suffixIcon: isPassword
+            ? IconButton(
+                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  color: AppColors.textSecondary(isDark),
+                ),
+              )
+            : null,
+      ),
+    );
+  }
+}
+
+class _GlowOrb extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowOrb({
+    required this.size,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 14,
+            ),
+          ],
         ),
       ),
     );
