@@ -14,6 +14,10 @@ abstract class AuthRepository {
   Future<AuthResult> signInWithGoogle();
   Future<void> signOut();
   Future<void> resetPassword(String email);
+  Future<void> confirmPasswordReset({
+    required String otp,
+    required String newPassword,
+  });
   Future<AppUser?> getCurrentUser();
   Future<bool> hasActiveSession();
   Stream<AppUser?> watchAuthState();

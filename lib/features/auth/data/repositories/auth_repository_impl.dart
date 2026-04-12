@@ -1,7 +1,10 @@
 import 'dart:async';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_config.dart';
 import '../../../../core/api/api_payload.dart';
@@ -23,10 +26,11 @@ class AuthRepositoryImpl implements AuthRepository {
       'password': password,
     });
 
-    final token = response.data['token'] as String;
+    final payload = ApiPayload.unwrapObject(response.data);
+    final token = payload['token'] as String;
     await _saveToken(token);
 
-    final user = _mapResponseToUser(response.data);
+    final user = _mapResponseToUser(payload);
     _authStateController.add(user);
 
     return AuthResult(token: token, user: user);
@@ -51,10 +55,11 @@ class AuthRepositoryImpl implements AuthRepository {
       'code': code,
     });
 
-    final token = response.data['token'] as String;
+    final payload = ApiPayload.unwrapObject(response.data);
+    final token = payload['token'] as String;
     await _saveToken(token);
 
-    final user = _mapResponseToUser(response.data);
+    final user = _mapResponseToUser(payload);
     _authStateController.add(user);
 
     return AuthResult(token: token, user: user);
@@ -62,32 +67,43 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<AuthResult> signInWithGoogle() async {
-    final googleSignIn = GoogleSignIn(
-      serverClientId:
-          ApiConfig.googleServerClientId.isEmpty ? null : ApiConfig.googleServerClientId,
-    );
-    final googleUser = await googleSignIn.signIn();
-    if (googleUser == null) {
-      throw Exception('تم إلغاء عملية تسجيل الدخول');
+    try {
+      final googleSignIn = GoogleSignIn(
+        serverClientId:
+            ApiConfig.googleServerClientId.isEmpty ? null : ApiConfig.googleServerClientId,
+      );
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        throw Exception('تم إلغاء عملية تسجيل الدخول.');
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      if (idToken == null) {
+        throw Exception('تعذر الحصول على Google ID token.');
+      }
+
+      final response = await _api.post(ApiConfig.googleLogin, data: {
+        'idToken': idToken,
+      });
+
+      final payload = ApiPayload.unwrapObject(response.data);
+      final token = payload['token'] as String;
+      await _saveToken(token);
+
+      final user = _mapResponseToUser(payload);
+      _authStateController.add(user);
+
+      return AuthResult(token: token, user: user);
+    } on PlatformException catch (error) {
+      if (error.code == 'sign_in_failed') {
+        throw Exception(
+          'Google Sign-In غير مهيأ لهذا البناء بعد. يلزم تسجيل com.tartelea.mobile مع بصمة SHA الصحيحة في Google Cloud.',
+        );
+      }
+
+      throw Exception(error.message ?? 'تعذر تسجيل الدخول عبر Google.');
     }
-
-    final googleAuth = await googleUser.authentication;
-    final idToken = googleAuth.idToken;
-    if (idToken == null) {
-      throw Exception('تعذر الحصول على Google ID token');
-    }
-
-    final response = await _api.post(ApiConfig.googleLogin, data: {
-      'idToken': idToken,
-    });
-
-    final token = response.data['token'] as String;
-    await _saveToken(token);
-
-    final user = _mapResponseToUser(response.data);
-    _authStateController.add(user);
-
-    return AuthResult(token: token, user: user);
   }
 
   @override
@@ -100,6 +116,17 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> resetPassword(String email) async {
     await _api.post(ApiConfig.forgotPassword, data: {'email': _normalizeEmail(email)});
+  }
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String otp,
+    required String newPassword,
+  }) async {
+    await _api.post(ApiConfig.resetPassword, data: {
+      'otp': otp.trim(),
+      'newPassword': newPassword,
+    });
   }
 
   @override

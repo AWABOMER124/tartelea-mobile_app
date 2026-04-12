@@ -131,6 +131,150 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
   }
 
+  Future<void> _showForgotPasswordDialog() async {
+    final emailController = TextEditingController(text: _emailController.text.trim());
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('استعادة كلمة المرور'),
+          content: TextField(
+            controller: emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(
+              labelText: 'البريد الإلكتروني',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final email = emailController.text.trim();
+                if (email.isEmpty) {
+                  _showMessage('أدخل البريد الإلكتروني أولًا.');
+                  return;
+                }
+
+                Navigator.of(dialogContext).pop();
+                setState(() => _isLoading = true);
+
+                try {
+                  await ref.read(authRepositoryProvider).resetPassword(email);
+                  _showMessage('إذا كانت خدمة البريد مهيأة فسيصل رمز الاستعادة إلى بريدك الإلكتروني.');
+                  _emailController.text = email;
+                  if (mounted) {
+                    await _showResetPasswordDialog();
+                  }
+                } catch (error) {
+                  _handleAuthFailure(error);
+                } finally {
+                  if (mounted) {
+                    setState(() => _isLoading = false);
+                  }
+                }
+              },
+              child: const Text('إرسال الرمز'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showResetPasswordDialog() async {
+    final otpController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    var obscureNewPassword = true;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('تأكيد استعادة كلمة المرور'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: otpController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'رمز الاستعادة',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: newPasswordController,
+                    obscureText: obscureNewPassword,
+                    decoration: InputDecoration(
+                      labelText: 'كلمة المرور الجديدة',
+                      suffixIcon: IconButton(
+                        onPressed: () => setDialogState(() {
+                          obscureNewPassword = !obscureNewPassword;
+                        }),
+                        icon: Icon(
+                          obscureNewPassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final otp = otpController.text.trim();
+                    final newPassword = newPasswordController.text.trim();
+
+                    if (otp.length != 6) {
+                      _showMessage('أدخل رمز الاستعادة المكون من 6 أرقام.');
+                      return;
+                    }
+
+                    if (newPassword.length < 6) {
+                      _showMessage('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.');
+                      return;
+                    }
+
+                    Navigator.of(dialogContext).pop();
+                    setState(() => _isLoading = true);
+
+                    try {
+                      await ref.read(authRepositoryProvider).confirmPasswordReset(
+                            otp: otp,
+                            newPassword: newPassword,
+                          );
+                      _passwordController.text = newPassword;
+                      _showMessage('تمت إعادة تعيين كلمة المرور. يمكنك تسجيل الدخول الآن.');
+                    } catch (error) {
+                      _handleAuthFailure(error);
+                    } finally {
+                      if (mounted) {
+                        setState(() => _isLoading = false);
+                      }
+                    }
+                  },
+                  child: const Text('حفظ كلمة المرور'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showMessage(String message) {
     if (!mounted) {
       return;
@@ -151,6 +295,32 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final code = _errorCode(error);
     final rawMessage = _backendMessage(error);
 
+    if (code == 'EMAIL_NOT_CONFIGURED') {
+      return 'خدمة البريد غير مهيأة على السيرفر. رموز التحقق والاستعادة لن تصل حتى يتم ضبط SMTP.';
+    }
+    if (code == 'EMAIL_DELIVERY_TIMEOUT') {
+      return 'خدمة البريد استغرقت وقتًا طويلًا. حاول مرة أخرى بعد قليل.';
+    }
+    if (code == 'EMAIL_DELIVERY_FAILED') {
+      return 'فشل إرسال البريد من السيرفر. تحقق من إعدادات SMTP.';
+    }
+    if (code == 'GOOGLE_LOGIN_FAILED') {
+      return 'فشل تسجيل الدخول عبر Google من السيرفر. تحقق من إعدادات Google OAuth.';
+    }
+
+    if (rawMessage == 'Email delivery is not configured on the server.') {
+      return 'خدمة البريد غير مهيأة على السيرفر. رموز التحقق والاستعادة لن تصل حتى يتم ضبط SMTP.';
+    }
+    if (rawMessage == 'Email delivery timed out. Please try again.') {
+      return 'خدمة البريد استغرقت وقتًا طويلًا. حاول مرة أخرى بعد قليل.';
+    }
+    if (rawMessage == 'Email delivery failed. Please try again later.') {
+      return 'فشل إرسال البريد من السيرفر. تحقق من إعدادات SMTP.';
+    }
+    if (rawMessage != null && rawMessage.contains('Google Sign-In غير مهيأ')) {
+      return rawMessage;
+    }
+
     switch (code) {
       case 'EMAIL_ALREADY_REGISTERED':
         return 'هذا البريد مسجل بالفعل.';
@@ -162,6 +332,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
       case 'INVALID_VERIFICATION_CODE':
         return 'رمز التحقق غير صحيح أو منتهي الصلاحية.';
+      case 'INVALID_RESET_CODE':
+        return 'رمز استعادة كلمة المرور غير صحيح أو منتهي الصلاحية.';
+      case 'EXPIRED_RESET_CODE':
+        return 'رمز استعادة كلمة المرور انتهت صلاحيته. اطلب رمزًا جديدًا.';
       case 'EMAIL_NOT_FOUND':
         return 'لا يوجد حساب مرتبط بهذا البريد الإلكتروني.';
     }
@@ -179,6 +353,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
       case 'Invalid or expired verification code':
         return 'رمز التحقق غير صحيح أو منتهي الصلاحية.';
+      case 'Invalid or expired reset code':
+        return 'رمز استعادة كلمة المرور غير صحيح أو منتهي الصلاحية.';
+      case 'Reset code has expired':
+        return 'رمز استعادة كلمة المرور انتهت صلاحيته. اطلب رمزًا جديدًا.';
       case 'Email not found':
         return 'لا يوجد حساب مرتبط بهذا البريد الإلكتروني.';
     }
@@ -463,6 +641,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           isPassword: true,
           isDark: isDark,
         ),
+        if (_isLogin) ...[
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _isLoading ? null : _showForgotPasswordDialog,
+              child: const Text('نسيت كلمة المرور؟'),
+            ),
+          ),
+        ],
         const SizedBox(height: 22),
         SizedBox(
           width: double.infinity,
