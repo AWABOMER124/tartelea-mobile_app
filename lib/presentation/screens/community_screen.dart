@@ -23,7 +23,13 @@ class CommunityScreen extends ConsumerWidget {
               Icons.add_comment_outlined,
               color: AppColors.appBarForeground(isDark),
             ),
-            onPressed: () {},
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('إنشاء منشور جديد من التطبيق سيتفعّل قريبًا.'),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -207,14 +213,26 @@ class _PostCard extends StatelessWidget {
                 icon: Icons.thumb_up_alt_outlined,
                 label: 'أعجبني',
                 color: AppColors.textSecondary(isDark),
-                onTap: () {},
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('ميزة التفاعل ستتفعّل في التحديث القادم.'),
+                    ),
+                  );
+                },
               ),
               const SizedBox(width: 24),
               _ActionButton(
                 icon: Icons.chat_bubble_outline,
                 label: 'تعليق',
                 color: AppColors.textSecondary(isDark),
-                onTap: () {},
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('ميزة التعليقات من التطبيق ستتفعّل قريبًا.'),
+                    ),
+                  );
+                },
               ),
               const Spacer(),
               Icon(

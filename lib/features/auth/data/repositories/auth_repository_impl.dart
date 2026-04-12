@@ -37,12 +37,43 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<void> signUp({required String email, required String password, String? fullName}) async {
-    await _api.post(ApiConfig.signup, data: {
+  Future<SignUpResult> signUp({
+    required String email,
+    required String password,
+    String? fullName,
+  }) async {
+    final response = await _api.post(ApiConfig.signup, data: {
       'email': _normalizeEmail(email),
       'password': password,
       'full_name': fullName,
     });
+
+    final payload = ApiPayload.unwrapObject(response.data);
+    final token = payload['token'] as String?;
+    final needsVerification = payload['needsVerification'] == true;
+    final emailVerificationPending = payload['emailVerificationPending'] == true;
+    final message = response.data['message']?.toString();
+
+    AppUser? user;
+    if (payload['user'] is Map<String, dynamic>) {
+      user = _mapResponseToUser(payload);
+    }
+
+    if (token != null) {
+      await _saveToken(token);
+    }
+
+    if (user != null) {
+      _authStateController.add(user);
+    }
+
+    return SignUpResult(
+      token: token,
+      user: user,
+      needsVerification: needsVerification,
+      emailVerificationPending: emailVerificationPending,
+      message: message,
+    );
   }
 
   @override
@@ -98,7 +129,7 @@ class AuthRepositoryImpl implements AuthRepository {
     } on PlatformException catch (error) {
       if (error.code == 'sign_in_failed') {
         throw Exception(
-          'Google Sign-In غير مهيأ لهذا البناء بعد. يلزم تسجيل com.tartelea.mobile مع بصمة SHA الصحيحة في Google Cloud.',
+          'Google Sign-In غير مهيأ لهذا البناء بعد. يلزم تسجيل com.tartelea.app مع بصمة SHA الصحيحة في Google Cloud.',
         );
       }
 

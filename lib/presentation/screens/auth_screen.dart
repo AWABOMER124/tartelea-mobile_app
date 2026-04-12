@@ -65,14 +65,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           context.go('/');
         }
       } else {
-        await ref.read(authRepositoryProvider).signUp(
+        final result = await ref.read(authRepositoryProvider).signUp(
               email: email,
               password: password,
               fullName: fullName,
             );
         if (mounted) {
-          setState(() => _needsVerification = true);
-          _showMessage('تم إرسال رمز التحقق إلى بريدك الإلكتروني.');
+          if (result.token != null && !result.needsVerification) {
+            ref.invalidate(authTokenProvider);
+            ref.invalidate(profileProvider);
+            _showMessage(result.message ?? 'تم إنشاء الحساب وتسجيل الدخول بنجاح.');
+            context.go('/');
+          } else {
+            setState(() => _needsVerification = result.needsVerification);
+            _showMessage(result.message ?? 'تم إرسال رمز التحقق إلى بريدك الإلكتروني.');
+          }
         }
       }
     } catch (error) {

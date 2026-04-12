@@ -29,7 +29,13 @@ class AudioRoomsScreen extends ConsumerWidget {
                 Icons.add_circle_outline_rounded,
                 color: AppColors.appBarForeground(isDark),
               ),
-              onPressed: () {},
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('إنشاء الغرف من التطبيق سيتفعّل في التحديث القادم.'),
+                  ),
+                );
+              },
             ),
           IconButton(
             icon: const Icon(Icons.stars_rounded, color: AppColors.accent),

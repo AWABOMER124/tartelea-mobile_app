@@ -1,4 +1,4 @@
-package com.tartelea.mobile
+package com.tartelea.app
 
 import io.flutter.embedding.android.FlutterActivity
 

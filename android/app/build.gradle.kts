@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.tartelea.mobile"
+    namespace = "com.tartelea.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.tartelea.mobile"
+        applicationId = "com.tartelea.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

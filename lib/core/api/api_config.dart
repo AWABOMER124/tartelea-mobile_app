@@ -16,6 +16,10 @@ class ApiConfig {
     defaultValue:
         '199107182598-d9b1anek3f57ij2427c14h8d05blfg3e.apps.googleusercontent.com',
   );
+  static const bool subscriptionsPaused = bool.fromEnvironment(
+    'SUBSCRIPTIONS_PAUSED',
+    defaultValue: true,
+  );
 
   // Auth endpoints
   static const String login = '/auth/login';

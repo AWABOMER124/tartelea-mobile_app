@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api/api_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../widgets/common_app_bar.dart';
 import 'paypal_checkout_screen.dart';
@@ -231,6 +232,15 @@ class PricingScreen extends ConsumerWidget {
   }
 
   void _navigateToPayPal(BuildContext context) {
+    if (ApiConfig.subscriptionsPaused) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('الاشتراك متوقف مؤقتًا أثناء الاختبار الحي.'),
+        ),
+      );
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const PayPalCheckoutScreen(),

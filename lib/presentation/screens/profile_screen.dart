@@ -166,8 +166,30 @@ class ProfileScreen extends ConsumerWidget {
       ),
       child: Column(
         children: [
-          _MenuItem(icon: Icons.bookmark_outline, label: 'المفضلة', isDark: isDark, onTap: () {}),
-          _MenuItem(icon: Icons.history_edu_outlined, label: 'سجل التعلم', isDark: isDark, onTap: () {}),
+          _MenuItem(
+            icon: Icons.bookmark_outline,
+            label: 'المفضلة',
+            isDark: isDark,
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('قائمة المفضلة ستتفعّل في التحديث القادم.'),
+                ),
+              );
+            },
+          ),
+          _MenuItem(
+            icon: Icons.history_edu_outlined,
+            label: 'سجل التعلم',
+            isDark: isDark,
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('سجل التعلم سيظهر هنا عند تفعيل الميزة.'),
+                ),
+              );
+            },
+          ),
           _MenuItem(
             icon: Icons.stars_outlined,
             label: 'ترتيلة بريميوم',
@@ -175,8 +197,24 @@ class ProfileScreen extends ConsumerWidget {
             color: isDark ? AppColors.darkPrimary : AppColors.accent,
             onTap: () => context.push('/pricing'),
           ),
-          _MenuItem(icon: Icons.payment_outlined, label: 'سجل الاشتراكات', isDark: isDark, onTap: () {}),
-          _MenuItem(icon: Icons.help_outline, label: 'مركز المساعدة', isDark: isDark, onTap: () {}),
+          _MenuItem(
+            icon: Icons.payment_outlined,
+            label: 'سجل الاشتراكات',
+            isDark: isDark,
+            onTap: () => context.push('/pricing'),
+          ),
+          _MenuItem(
+            icon: Icons.help_outline,
+            label: 'مركز المساعدة',
+            isDark: isDark,
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('مركز المساعدة سيُضاف داخل التطبيق قريبًا.'),
+                ),
+              );
+            },
+          ),
           const Divider(height: 24),
           _MenuItem(
             icon: Icons.logout_rounded,
