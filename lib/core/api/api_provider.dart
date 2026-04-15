@@ -8,18 +8,19 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('sharedPreferencesProvider must be overridden in ProviderScope');
 });
 
+final storedAuthTokenProvider = Provider<String?>((ref) {
+  final prefs = ref.watch(sharedPreferencesProvider);
+  return prefs.getString('auth_token');
+});
+
 // Provider for the ApiClient
 final apiClientProvider = Provider<ApiClient>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  final token = prefs.getString('auth_token');
-  
+  final token = ref.watch(storedAuthTokenProvider);
   return ApiClient(token: token);
 });
 
 final livekitApiClientProvider = Provider<ApiClient>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  final token = prefs.getString('auth_token');
-
+  final token = ref.watch(storedAuthTokenProvider);
   return ApiClient(
     baseUrl: ApiConfig.livekitBaseUrl,
     token: token,

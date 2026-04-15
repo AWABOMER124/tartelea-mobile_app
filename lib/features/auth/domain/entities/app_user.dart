@@ -1,6 +1,7 @@
 enum UserRole {
   student,
   trainer,
+  moderator,
   admin,
 }
 

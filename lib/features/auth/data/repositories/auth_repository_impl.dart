@@ -14,6 +14,10 @@ import '../../domain/repositories/auth_repository.dart';
 class AuthRepositoryImpl implements AuthRepository {
   final ApiClient _api;
   final _authStateController = StreamController<AppUser?>.broadcast();
+  late final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId:
+        ApiConfig.googleServerClientId.isEmpty ? null : ApiConfig.googleServerClientId,
+  );
 
   static const _tokenKey = 'auth_token';
 
@@ -99,11 +103,8 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<AuthResult> signInWithGoogle() async {
     try {
-      final googleSignIn = GoogleSignIn(
-        serverClientId:
-            ApiConfig.googleServerClientId.isEmpty ? null : ApiConfig.googleServerClientId,
-      );
-      final googleUser = await googleSignIn.signIn();
+      await _resetGoogleSelection();
+      final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         throw Exception('تم إلغاء عملية تسجيل الدخول.');
       }
@@ -141,6 +142,23 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> signOut() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
+    _api.setToken(null);
+
+    final isGoogleSignedIn = await _googleSignIn.isSignedIn();
+    if (isGoogleSignedIn) {
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {
+        // Ignore Google SDK sign-out failures and continue clearing local state.
+      }
+
+      try {
+        await _googleSignIn.disconnect();
+      } catch (_) {
+        // Ignore disconnect failures if the Google session was already cleared.
+      }
+    }
+
     _authStateController.add(null);
   }
 
@@ -193,6 +211,15 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> _saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
+    _api.setToken(token);
+  }
+
+  Future<void> _resetGoogleSelection() async {
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {
+      // Ignore cached-session cleanup failures before opening account chooser.
+    }
   }
 
   static String _normalizeEmail(String value) {
@@ -226,7 +253,9 @@ class AuthRepositoryImpl implements AuthRepository {
   static UserRole _parseRole(String? role) {
     return switch (role) {
       'admin' => UserRole.admin,
+      'moderator' => UserRole.moderator,
       'trainer' => UserRole.trainer,
+      'member' => UserRole.student,
       _ => UserRole.student,
     };
   }

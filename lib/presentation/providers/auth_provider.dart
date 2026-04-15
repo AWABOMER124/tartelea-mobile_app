@@ -10,11 +10,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepositoryImpl(api);
 });
 
-// Simple provider to check if a token exists
-final authTokenProvider = Provider<String?>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return prefs.getString('auth_token');
-});
+final authTokenProvider = storedAuthTokenProvider;
 
 final profileProvider = FutureProvider<ProfileModel?>((ref) async {
   final token = ref.watch(authTokenProvider);
@@ -41,7 +37,9 @@ final userProvider = Provider<ProfileModel?>((ref) {
 final isAuthorizedProvider = Provider<bool>((ref) {
   final profileAsync = ref.watch(profileProvider);
   return profileAsync.maybeWhen(
-    data: (profile) => profile != null && (profile.role == 'trainer' || profile.role == 'admin'),
+    data: (profile) =>
+        profile != null &&
+        (profile.role == 'trainer' || profile.role == 'moderator' || profile.role == 'admin'),
     orElse: () => false,
   );
 });

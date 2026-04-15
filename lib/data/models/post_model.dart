@@ -4,6 +4,7 @@ class PostModel {
   final String title;
   final String? body;
   final String category;
+  final String? authorName;
   final DateTime createdAt;
 
   PostModel({
@@ -12,6 +13,7 @@ class PostModel {
     required this.title,
     this.body,
     required this.category,
+    this.authorName,
     required this.createdAt,
   });
 
@@ -22,6 +24,7 @@ class PostModel {
       title: json['title'] ?? '',
       body: json['body'],
       category: json['category'] ?? 'general',
+      authorName: json['author_name']?.toString(),
       createdAt: json['created_at'] != null 
           ? DateTime.tryParse(json['created_at']) ?? DateTime.now()
           : DateTime.now(),
@@ -35,6 +38,7 @@ class PostModel {
       'title': title,
       'body': body,
       'category': category,
+      'author_name': authorName,
       'created_at': createdAt.toIso8601String(),
     };
   }

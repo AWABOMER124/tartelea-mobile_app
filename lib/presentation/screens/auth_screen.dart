@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../providers/auth_provider.dart';
+import '../providers/profile_provider.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -61,6 +62,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             );
         ref.invalidate(authTokenProvider);
         ref.invalidate(profileProvider);
+        ref.invalidate(userProfileProvider);
         if (mounted) {
           context.go('/');
         }
@@ -107,6 +109,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           );
       ref.invalidate(authTokenProvider);
       ref.invalidate(profileProvider);
+      ref.invalidate(userProfileProvider);
       if (mounted) {
         context.go('/');
       }
@@ -126,6 +129,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       await ref.read(authRepositoryProvider).signInWithGoogle();
       ref.invalidate(authTokenProvider);
       ref.invalidate(profileProvider);
+      ref.invalidate(userProfileProvider);
       if (mounted) {
         context.go('/');
       }

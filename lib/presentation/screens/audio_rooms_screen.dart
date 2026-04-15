@@ -1,7 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/audio_room_model.dart';
 import '../providers/audio_room_list_provider.dart';
@@ -29,18 +31,13 @@ class AudioRoomsScreen extends ConsumerWidget {
                 Icons.add_circle_outline_rounded,
                 color: AppColors.appBarForeground(isDark),
               ),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('إنشاء الغرف من التطبيق سيتفعّل في التحديث القادم.'),
-                  ),
-                );
-              },
+              onPressed: () => _showCreateRoomSheet(context, ref, isDark),
             ),
-          IconButton(
-            icon: const Icon(Icons.stars_rounded, color: AppColors.accent),
-            onPressed: () => context.push('/pricing'),
-          ),
+          if (!ApiConfig.subscriptionsPaused)
+            IconButton(
+              icon: const Icon(Icons.stars_rounded, color: AppColors.accent),
+              onPressed: () => context.push('/pricing'),
+            ),
         ],
       ),
       body: Container(
@@ -93,6 +90,152 @@ class AudioRoomsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showCreateRoomSheet(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+  ) async {
+    final user = ref.read(userProvider);
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('سجل الدخول أولاً لإنشاء غرفة صوتية.')),
+      );
+      context.go('/auth');
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    String title = '';
+    String description = '';
+    bool isSubmitting = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> submit() async {
+              if (title.trim().length < 3) {
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('عنوان الغرفة يجب أن يكون 3 أحرف على الأقل.')),
+                );
+                return;
+              }
+
+              setSheetState(() => isSubmitting = true);
+
+              try {
+                final room = await ref.read(audioRoomRepositoryProvider).createRoom(
+                      title: title.trim(),
+                      description: description.trim().isEmpty ? null : description.trim(),
+                    );
+
+                if (room == null) {
+                  throw Exception('تعذر إنشاء الغرفة.');
+                }
+
+                ref.invalidate(liveAudioRoomsProvider);
+                if (sheetContext.mounted) {
+                  Navigator.of(sheetContext).pop();
+                }
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('تم إنشاء الغرفة الصوتية بنجاح.')),
+                );
+              } catch (error) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text(_errorMessage(error))),
+                );
+              } finally {
+                if (sheetContext.mounted) {
+                  setSheetState(() => isSubmitting = false);
+                }
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 18,
+                right: 18,
+                top: 18,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 18,
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.panelColor(isDark),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: AppColors.borderColor(isDark)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'إنشاء غرفة صوتية',
+                      style: TextStyle(
+                        color: AppColors.textPrimary(isDark),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      enabled: !isSubmitting,
+                      onChanged: (value) => title = value,
+                      decoration: const InputDecoration(
+                        labelText: 'عنوان الغرفة',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      enabled: !isSubmitting,
+                      minLines: 3,
+                      maxLines: 5,
+                      onChanged: (value) => description = value,
+                      decoration: const InputDecoration(
+                        labelText: 'وصف مختصر',
+                        alignLabelWithHint: true,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isSubmitting ? null : submit,
+                        child: isSubmitting
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('فتح الغرفة'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _errorMessage(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map<String, dynamic>) {
+        return (data['message'] ?? data['error']?['message'] ?? 'تعذر إنشاء الغرفة.')
+            .toString();
+      }
+      return error.message ?? 'تعذر إنشاء الغرفة.';
+    }
+
+    return error.toString().replaceFirst('Exception: ', '');
   }
 
   Widget _buildLiveIndicator(bool isDark) {

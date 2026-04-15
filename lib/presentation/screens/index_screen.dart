@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/api/api_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
@@ -229,8 +230,13 @@ class IndexScreen extends ConsumerWidget {
       {'label': 'المكتبة', 'icon': Icons.book_outlined, 'path': '/library'},
       {'label': 'الورش', 'icon': Icons.video_camera_front_outlined, 'path': '/workshops'},
       {'label': 'الغرف الصوتية', 'icon': Icons.mic_external_on_outlined, 'path': '/audio-rooms'},
-      {'label': 'الاشتراك المميز', 'icon': Icons.stars_outlined, 'path': '/pricing'},
     ];
+
+    if (!ApiConfig.subscriptionsPaused) {
+      navItems.add(
+        {'label': 'الاشتراك المميز', 'icon': Icons.stars_outlined, 'path': '/pricing'},
+      );
+    }
 
     return Container(
       width: double.infinity,

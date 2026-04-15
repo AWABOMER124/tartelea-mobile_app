@@ -31,22 +31,18 @@ class PostRepository {
     String? body,
     required String category,
   }) async {
-    try {
-      final response = await _api.post(ApiConfig.posts, data: {
-        'title': title,
-        'body': body,
-        'category': category,
-      });
+    final response = await _api.post(ApiConfig.posts, data: {
+      'title': title,
+      'body': body,
+      'category': category,
+    });
 
-      return PostModel.fromJson(
-        ApiPayload.unwrapObject(
-          response.data,
-          preferredKeys: const ['post'],
-        ),
-      );
-    } catch (_) {
-      return null;
-    }
+    return PostModel.fromJson(
+      ApiPayload.unwrapObject(
+        response.data,
+        preferredKeys: const ['post'],
+      ),
+    );
   }
 
   Future<void> likePost(String postId) async {

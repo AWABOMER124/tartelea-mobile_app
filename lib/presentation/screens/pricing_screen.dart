@@ -29,20 +29,68 @@ class PricingScreen extends ConsumerWidget {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                _buildHeader(),
-                const SizedBox(height: 40),
-                _buildPremiumCard(context),
-                const SizedBox(height: 40),
-                _buildBenefitsList(),
-                const SizedBox(height: 40),
-                _buildSecureFooter(),
-              ],
-            ),
+          child: ApiConfig.subscriptionsPaused
+              ? _buildPausedState()
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 20),
+                      _buildHeader(),
+                      const SizedBox(height: 40),
+                      _buildPremiumCard(context),
+                      const SizedBox(height: 40),
+                      _buildBenefitsList(),
+                      const SizedBox(height: 40),
+                      _buildSecureFooter(),
+                    ],
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPausedState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: Colors.white.withAlpha(18),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withAlpha(40)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.pause_circle_outline_rounded,
+                color: AppColors.accent,
+                size: 54,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'الاشتراك متوقف حاليًا',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'تم إخفاء باقات الاشتراك مؤقتًا خلال المرحلة الأولى من الإطلاق، وسيتم تفعيلها لاحقًا عند الجاهزية.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withAlpha(190),
+                  fontSize: 15,
+                  height: 1.7,
+                ),
+              ),
+            ],
           ),
         ),
       ),

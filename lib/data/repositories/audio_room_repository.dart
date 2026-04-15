@@ -7,6 +7,22 @@ class AudioRoomRepository {
 
   AudioRoomRepository(this._api);
 
+  Future<AudioRoomModel?> createRoom({
+    required String title,
+    String? description,
+  }) async {
+    final response = await _api.post('/audio-rooms', data: {
+      'title': title,
+      'description': description,
+    });
+
+    final roomJson = ApiPayload.unwrapObject(
+      response.data,
+      preferredKeys: const ['room'],
+    );
+    return AudioRoomModel.fromJson(roomJson);
+  }
+
   Future<List<AudioRoomModel>> getLiveRooms() async {
     final response = await _api.get('/audio-rooms/live');
     final rooms = ApiPayload.unwrapList(
