@@ -160,9 +160,11 @@ class _AudioRoomsScreenState extends ConsumerState<AudioRoomsScreen> {
                   const SnackBar(content: Text('تم إنشاء الجلسة بنجاح.')),
                 );
 
-                if (mounted) {
-                  context.push('/audio-room/${created.session.id}');
+                if (!context.mounted) {
+                  return;
                 }
+
+                context.push('/audio-room/${created.session.id}');
               } catch (error) {
                 messenger.showSnackBar(
                   SnackBar(

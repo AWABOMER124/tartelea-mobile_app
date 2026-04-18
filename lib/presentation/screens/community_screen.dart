@@ -222,7 +222,7 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> {
       ref.invalidate(communityFeedProvider(activeContextId));
       ref.invalidate(communityPostDetailsProvider(post.id));
     } catch (error) {
-      if (!mounted) {
+      if (!context.mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
@@ -341,7 +341,7 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: selectedContextId,
+                      initialValue: selectedContextId,
                       decoration: const InputDecoration(
                         labelText: 'المساحة',
                       ),
@@ -705,7 +705,7 @@ class _CommunityPostCard extends StatelessWidget {
                   ),
                   if (post.isLocked) ...[
                     const Spacer(),
-                    Text(
+                    const Text(
                       'التعليقات مغلقة',
                       style: TextStyle(
                         color: AppColors.warning,

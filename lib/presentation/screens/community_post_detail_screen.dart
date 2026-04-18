@@ -187,6 +187,10 @@ class CommunityPostDetailScreen extends ConsumerWidget {
       ref.invalidate(communityPostDetailsProvider(post.id));
       ref.invalidate(communityFeedProvider(post.primaryContext.id));
     } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
       );

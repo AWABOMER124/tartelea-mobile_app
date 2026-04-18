@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:livekit_client/livekit_client.dart';
+import 'package:livekit_client/livekit_client.dart' as lk;
 
 import '../../core/api/api_config.dart';
 import '../../core/theme/app_colors.dart';
@@ -35,7 +35,7 @@ class _AudioRoomDetailScreenState
   String? _errorMessage;
   String? _livekitError;
   Timer? _pollTimer;
-  Room? _room;
+  lk.Room? _room;
   VoidCallback? _roomListener;
 
   @override
@@ -178,15 +178,15 @@ class _AudioRoomDetailScreenState
 
       await _disconnectRoom();
 
-      final room = Room(
-        roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true),
+      final room = lk.Room(
+        roomOptions: const lk.RoomOptions(adaptiveStream: true, dynacast: true),
       );
 
-      final listener = () {
+      void listener() {
         if (mounted) {
           setState(() {});
         }
-      };
+      }
       room.addListener(listener);
       _roomListener = listener;
 
@@ -470,10 +470,10 @@ class _AudioRoomDetailScreenState
   ) {
     final connectionState = _room?.connectionState;
     final connectionLabel = switch (connectionState) {
-      ConnectionState.connected => 'متصل بالبث',
-      ConnectionState.connecting => 'جارٍ الاتصال',
-      ConnectionState.reconnecting => 'إعادة الاتصال',
-      ConnectionState.disconnected => 'غير متصل',
+      lk.ConnectionState.connected => 'متصل بالبث',
+      lk.ConnectionState.connecting => 'جارٍ الاتصال',
+      lk.ConnectionState.reconnecting => 'إعادة الاتصال',
+      lk.ConnectionState.disconnected => 'غير متصل',
       null => details.session.isLive ? 'جاهز للدخول' : 'بانتظار بدء البث',
     };
 
@@ -527,7 +527,7 @@ class _AudioRoomDetailScreenState
     SessionDetailsModel details,
     bool userSignedIn,
   ) {
-    final isConnected = _room?.connectionState == ConnectionState.connected;
+    final isConnected = _room?.connectionState == lk.ConnectionState.connected;
     final micEnabled = _room?.localParticipant != null
         ? !(_room!.localParticipant!.isMuted)
         : false;
@@ -761,7 +761,7 @@ class _AudioRoomDetailScreenState
                       ),
                     ),
                     if (participant.hasRaisedHand)
-                      Icon(
+                      const Icon(
                         Icons.pan_tool_alt_outlined,
                         color: AppColors.warning,
                         size: 18,
