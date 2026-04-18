@@ -1,24 +1,31 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
-import '../../core/api/api_config.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/models/audio_room_model.dart';
-import '../providers/audio_room_list_provider.dart';
+import '../../data/models/session_models.dart';
 import '../providers/auth_provider.dart';
+import '../providers/session_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/common_app_bar.dart';
 
-class AudioRoomsScreen extends ConsumerWidget {
+class AudioRoomsScreen extends ConsumerStatefulWidget {
   const AudioRoomsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isAuthorized = ref.watch(isAuthorizedProvider);
+  ConsumerState<AudioRoomsScreen> createState() => _AudioRoomsScreenState();
+}
+
+class _AudioRoomsScreenState extends ConsumerState<AudioRoomsScreen> {
+  String? _selectedStatus;
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = ref.watch(themeProvider) == ThemeMode.dark;
-    final roomsAsync = ref.watch(liveAudioRoomsProvider);
+    final isAuthorized = ref.watch(isAuthorizedProvider);
+    final selectedStatus = _selectedStatus;
+    final sessionsAsync = ref.watch(sessionListProvider(selectedStatus));
 
     return Scaffold(
       appBar: CommonAppBar(
@@ -31,12 +38,7 @@ class AudioRoomsScreen extends ConsumerWidget {
                 Icons.add_circle_outline_rounded,
                 color: AppColors.appBarForeground(isDark),
               ),
-              onPressed: () => _showCreateRoomSheet(context, ref, isDark),
-            ),
-          if (!ApiConfig.subscriptionsPaused)
-            IconButton(
-              icon: const Icon(Icons.stars_rounded, color: AppColors.accent),
-              onPressed: () => context.push('/pricing'),
+              onPressed: () => _showCreateRoomSheet(context, isDark),
             ),
         ],
       ),
@@ -50,27 +52,39 @@ class AudioRoomsScreen extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
               child: Column(
                 children: [
-                  _buildLiveIndicator(isDark),
-                  const SizedBox(height: 12),
-                  _buildInfoPanel(isDark),
+                  _buildHeroPanel(isDark),
+                  const SizedBox(height: 14),
+                  _StatusStrip(
+                    isDark: isDark,
+                    selectedStatus: selectedStatus ?? 'all',
+                    onSelected: (status) {
+                      setState(() {
+                        _selectedStatus = status == 'all' ? null : status;
+                      });
+                    },
+                  ),
                 ],
               ),
             ),
             Expanded(
-              child: roomsAsync.when(
-                data: (rooms) {
-                  if (rooms.isEmpty) {
-                    return _AudioRoomsEmptyState(isDark: isDark);
+              child: sessionsAsync.when(
+                data: (sessions) {
+                  if (sessions.isEmpty) {
+                    return _EmptyState(isDark: isDark);
                   }
 
                   return RefreshIndicator(
-                    onRefresh: () => ref.refresh(liveAudioRoomsProvider.future),
+                    onRefresh: () async {
+                      ref.invalidate(sessionListProvider(selectedStatus));
+                    },
                     child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(18, 6, 18, 24),
-                      itemCount: rooms.length,
-                      itemBuilder: (context, index) => _RoomCard(
-                        room: rooms[index],
+                      padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                      itemCount: sessions.length,
+                      itemBuilder: (context, index) => _SessionCard(
+                        item: sessions[index],
                         isDark: isDark,
+                        onTap: () =>
+                            context.push('/audio-room/${sessions[index].session.id}'),
                       ),
                     ),
                   );
@@ -80,9 +94,10 @@ class AudioRoomsScreen extends ConsumerWidget {
                     color: isDark ? AppColors.darkPrimary : AppColors.primary,
                   ),
                 ),
-                error: (_, __) => _AudioRoomsErrorState(
+                error: (error, _) => _ErrorState(
                   isDark: isDark,
-                  onRetry: () => ref.refresh(liveAudioRoomsProvider),
+                  message: error.toString().replaceFirst('Exception: ', ''),
+                  onRetry: () => ref.invalidate(sessionListProvider(selectedStatus)),
                 ),
               ),
             ),
@@ -92,15 +107,11 @@ class AudioRoomsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showCreateRoomSheet(
-    BuildContext context,
-    WidgetRef ref,
-    bool isDark,
-  ) async {
+  Future<void> _showCreateRoomSheet(BuildContext context, bool isDark) async {
     final user = ref.read(userProvider);
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('سجل الدخول أولاً لإنشاء غرفة صوتية.')),
+        const SnackBar(content: Text('سجل الدخول أولًا لإنشاء جلسة صوتية.')),
       );
       context.go('/auth');
       return;
@@ -121,7 +132,9 @@ class AudioRoomsScreen extends ConsumerWidget {
             Future<void> submit() async {
               if (title.trim().length < 3) {
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('عنوان الغرفة يجب أن يكون 3 أحرف على الأقل.')),
+                  const SnackBar(
+                    content: Text('عنوان الجلسة يجب أن يكون 3 أحرف على الأقل.'),
+                  ),
                 );
                 return;
               }
@@ -129,25 +142,32 @@ class AudioRoomsScreen extends ConsumerWidget {
               setSheetState(() => isSubmitting = true);
 
               try {
-                final room = await ref.read(audioRoomRepositoryProvider).createRoom(
+                final created = await ref.read(sessionRepositoryProvider).createSession(
                       title: title.trim(),
-                      description: description.trim().isEmpty ? null : description.trim(),
+                      description:
+                          description.trim().isEmpty ? null : description.trim(),
                     );
 
-                if (room == null) {
-                  throw Exception('تعذر إنشاء الغرفة.');
-                }
+                ref.invalidate(sessionListProvider(null));
+                ref.invalidate(sessionListProvider('scheduled'));
+                ref.invalidate(sessionListProvider('live'));
 
-                ref.invalidate(liveAudioRoomsProvider);
                 if (sheetContext.mounted) {
                   Navigator.of(sheetContext).pop();
                 }
+
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('تم إنشاء الغرفة الصوتية بنجاح.')),
+                  const SnackBar(content: Text('تم إنشاء الجلسة بنجاح.')),
                 );
+
+                if (mounted) {
+                  context.push('/audio-room/${created.session.id}');
+                }
               } catch (error) {
                 messenger.showSnackBar(
-                  SnackBar(content: Text(_errorMessage(error))),
+                  SnackBar(
+                    content: Text(error.toString().replaceFirst('Exception: ', '')),
+                  ),
                 );
               } finally {
                 if (sheetContext.mounted) {
@@ -175,7 +195,7 @@ class AudioRoomsScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'إنشاء غرفة صوتية',
+                      'إنشاء جلسة صوتية',
                       style: TextStyle(
                         color: AppColors.textPrimary(isDark),
                         fontSize: 18,
@@ -187,7 +207,7 @@ class AudioRoomsScreen extends ConsumerWidget {
                       enabled: !isSubmitting,
                       onChanged: (value) => title = value,
                       decoration: const InputDecoration(
-                        labelText: 'عنوان الغرفة',
+                        labelText: 'عنوان الجلسة',
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -212,7 +232,7 @@ class AudioRoomsScreen extends ConsumerWidget {
                                 height: 20,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Text('فتح الغرفة'),
+                            : const Text('إنشاء الجلسة'),
                       ),
                     ),
                   ],
@@ -225,54 +245,7 @@ class AudioRoomsScreen extends ConsumerWidget {
     );
   }
 
-  String _errorMessage(Object error) {
-    if (error is DioException) {
-      final data = error.response?.data;
-      if (data is Map<String, dynamic>) {
-        return (data['message'] ?? data['error']?['message'] ?? 'تعذر إنشاء الغرفة.')
-            .toString();
-      }
-      return error.message ?? 'تعذر إنشاء الغرفة.';
-    }
-
-    return error.toString().replaceFirst('Exception: ', '');
-  }
-
-  Widget _buildLiveIndicator(bool isDark) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.panelColor(isDark),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.borderColor(isDark)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(
-              color: Colors.redAccent,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'يوجد بث صوتي مباشر الآن',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-              color: AppColors.textPrimary(isDark),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoPanel(bool isDark) {
+  Widget _buildHeroPanel(bool isDark) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -284,7 +257,7 @@ class AudioRoomsScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'جلسات مباشرة بهوية المدرسة',
+            'جلسات مباشرة ومساحات قادمة',
             style: TextStyle(
               color: Colors.white,
               fontSize: 18,
@@ -293,7 +266,7 @@ class AudioRoomsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'استكشف الغرف المتاحة وتابع المستمعين والمضيفين قبل الانضمام.',
+            'الموبايل أصبح يقرأ الغرف من عقد sessions الرسمي. افتح الجلسة لمتابعة البث أو الانضمام والتحكم حسب صلاحياتك.',
             style: TextStyle(
               color: Colors.white.withAlpha(222),
               fontSize: 13,
@@ -306,10 +279,270 @@ class AudioRoomsScreen extends ConsumerWidget {
   }
 }
 
-class _AudioRoomsEmptyState extends StatelessWidget {
+class _StatusStrip extends StatelessWidget {
+  final bool isDark;
+  final String selectedStatus;
+  final ValueChanged<String> onSelected;
+
+  const _StatusStrip({
+    required this.isDark,
+    required this.selectedStatus,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const filters = [
+      ('all', 'الكل'),
+      ('live', 'مباشر الآن'),
+      ('scheduled', 'القادمة'),
+      ('ended', 'المنتهية'),
+    ];
+
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemBuilder: (context, index) {
+          final filter = filters[index];
+          final isSelected = filter.$1 == selectedStatus;
+
+          return ChoiceChip(
+            label: Text(filter.$2),
+            selected: isSelected,
+            onSelected: (_) => onSelected(filter.$1),
+            labelStyle: TextStyle(
+              color: isSelected
+                  ? AppColors.accentForeground(isDark)
+                  : AppColors.textPrimary(isDark),
+              fontWeight: FontWeight.w700,
+            ),
+            backgroundColor: AppColors.panelColor(isDark),
+            selectedColor: isDark ? AppColors.darkPrimary : AppColors.accent,
+            side: BorderSide(color: AppColors.borderColor(isDark)),
+          );
+        },
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemCount: filters.length,
+      ),
+    );
+  }
+}
+
+class _SessionCard extends StatelessWidget {
+  final SessionListItemModel item;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _SessionCard({
+    required this.item,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheduledAt = item.session.scheduledAt.toLocal();
+    final dateLabel = DateFormat('dd MMM - HH:mm').format(scheduledAt);
+    final statusLabel = switch (item.session.status) {
+      'live' => 'مباشر',
+      'ended' => 'منتهية',
+      _ => 'قادمة',
+    };
+    final statusColor = switch (item.session.status) {
+      'live' => Colors.redAccent,
+      'ended' => AppColors.textSecondary(isDark),
+      _ => isDark ? AppColors.darkPrimary : AppColors.accent,
+    };
+    final denialText = _denialReasonText(item.access.denialReason);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: AppColors.panelColor(isDark),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: AppColors.borderColor(isDark)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(26),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: statusColor.withAlpha(28),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: statusColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    item.session.visibility == 'restricted'
+                        ? 'وصول مقيّد'
+                        : 'وصول عام',
+                    style: TextStyle(
+                      color: AppColors.textSecondary(isDark),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    item.session.isLive ? Icons.radio : Icons.schedule_outlined,
+                    color: statusColor,
+                    size: 18,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                item.session.title,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary(isDark),
+                ),
+              ),
+              if ((item.session.description ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  item.session.description!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.textSecondary(isDark),
+                    height: 1.5,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _MetaChip(
+                    isDark: isDark,
+                    icon: Icons.person_outline,
+                    label: item.room.host.name,
+                  ),
+                  _MetaChip(
+                    isDark: isDark,
+                    icon: Icons.people_outline,
+                    label:
+                        '${item.room.participantCount}/${item.room.maxParticipants}',
+                  ),
+                  _MetaChip(
+                    isDark: isDark,
+                    icon: Icons.calendar_today_outlined,
+                    label: dateLabel,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.access.isRegistered
+                          ? (item.session.isLive ? 'أنت مسجل ويمكنك الدخول' : 'أنت مسجل في هذه الجلسة')
+                          : denialText ??
+                              (item.access.canJoin
+                                  ? 'افتح الجلسة لمعرفة خطوات الانضمام'
+                                  : 'راجع الجلسة لمزيد من التفاصيل'),
+                      style: TextStyle(
+                        color: denialText != null
+                            ? AppColors.warning
+                            : AppColors.textSecondary(isDark),
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(
+                    Icons.chevron_left_rounded,
+                    color: AppColors.appBarForeground(isDark),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String? _denialReasonText(String? denialReason) {
+    return switch (denialReason) {
+      'AUTH_REQUIRED' => 'سجل الدخول أولًا للانضمام.',
+      'SESSION_NOT_APPROVED' => 'هذه الجلسة ما زالت بانتظار المراجعة.',
+      'SESSION_ENDED' => 'هذه الجلسة انتهت بالفعل.',
+      'SESSION_FULL' => 'وصلت الجلسة إلى الحد الأقصى من الحضور.',
+      'SUBSCRIPTION_REQUIRED' => 'هذه الجلسة تتطلب اشتراكًا فعالًا.',
+      _ => null,
+    };
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  final bool isDark;
+  final IconData icon;
+  final String label;
+
+  const _MetaChip({
+    required this.isDark,
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.subtleFill(isDark),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: AppColors.appBarForeground(isDark),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: AppColors.textPrimary(isDark),
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
   final bool isDark;
 
-  const _AudioRoomsEmptyState({required this.isDark});
+  const _EmptyState({required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -326,7 +559,7 @@ class _AudioRoomsEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'لا توجد غرف صوتية مباشرة الآن',
+              'لا توجد جلسات مطابقة لهذا الفلتر',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -335,7 +568,7 @@ class _AudioRoomsEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'عند بدء غرفة جديدة ستظهر هنا مباشرة.',
+              'جرّب تبديل الفلتر أو أنشئ جلسة جديدة إذا كانت الصلاحية متاحة لك.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textSecondary(isDark)),
             ),
@@ -346,12 +579,14 @@ class _AudioRoomsEmptyState extends StatelessWidget {
   }
 }
 
-class _AudioRoomsErrorState extends StatelessWidget {
+class _ErrorState extends StatelessWidget {
   final bool isDark;
+  final String message;
   final VoidCallback onRetry;
 
-  const _AudioRoomsErrorState({
+  const _ErrorState({
     required this.isDark,
+    required this.message,
     required this.onRetry,
   });
 
@@ -370,11 +605,20 @@ class _AudioRoomsErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'تعذر تحميل الغرف الصوتية',
+              'تعذر تحميل الجلسات',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary(isDark),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textSecondary(isDark),
+                height: 1.5,
               ),
             ),
             const SizedBox(height: 12),
@@ -384,163 +628,6 @@ class _AudioRoomsErrorState extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _RoomCard extends StatelessWidget {
-  final AudioRoomModel room;
-  final bool isDark;
-
-  const _RoomCard({
-    required this.room,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: AppColors.panelColor(isDark),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: AppColors.borderColor(isDark)),
-      ),
-      child: InkWell(
-        onTap: () => context.push('/audio-room/${room.id}'),
-        borderRadius: BorderRadius.circular(26),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withAlpha(30),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const Text(
-                      'LIVE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.redAccent,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'غرفة نشطة',
-                    style: TextStyle(
-                      color: AppColors.textSecondary(isDark),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                room.title,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary(isDark),
-                ),
-              ),
-              if (room.description.trim().isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  room.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.textSecondary(isDark),
-                    height: 1.5,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  _AvatarStack(isDark: isDark),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          room.hostName,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.appBarForeground(isDark),
-                          ),
-                        ),
-                        Text(
-                          '${room.listenerCount} مستمع حالياً',
-                          style: TextStyle(
-                            color: AppColors.textSecondary(isDark),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_left_rounded,
-                    color: AppColors.appBarForeground(isDark),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AvatarStack extends StatelessWidget {
-  final bool isDark;
-
-  const _AvatarStack({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 70,
-      height: 40,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.subtleFill(isDark),
-              child: Icon(
-                Icons.person_rounded,
-                size: 20,
-                color: AppColors.appBarForeground(isDark),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 20,
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: isDark ? AppColors.darkPrimary : AppColors.accentSoft,
-              child: Icon(
-                Icons.person_rounded,
-                size: 20,
-                color: AppColors.accentForeground(isDark),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

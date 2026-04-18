@@ -10,6 +10,7 @@ import 'presentation/providers/theme_provider.dart';
 import 'presentation/screens/audio_room_detail_screen.dart';
 import 'presentation/screens/audio_rooms_screen.dart';
 import 'presentation/screens/auth_screen.dart';
+import 'presentation/screens/community_post_detail_screen.dart';
 import 'presentation/screens/community_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/library_screen.dart';
@@ -71,6 +72,12 @@ final _router = GoRouter(
     GoRoute(
       path: '/community',
       builder: (context, state) => const CommunityScreen(),
+    ),
+    GoRoute(
+      path: '/community/post/:postId',
+      builder: (context, state) => CommunityPostDetailScreen(
+        postId: state.pathParameters['postId'] ?? '',
+      ),
     ),
   ],
 );

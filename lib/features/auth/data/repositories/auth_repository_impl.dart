@@ -31,7 +31,7 @@ class AuthRepositoryImpl implements AuthRepository {
     });
 
     final payload = ApiPayload.unwrapObject(response.data);
-    final token = payload['token'] as String;
+    final token = _readAccessToken(payload);
     await _saveToken(token);
 
     final user = _mapResponseToUser(payload);
@@ -53,7 +53,7 @@ class AuthRepositoryImpl implements AuthRepository {
     });
 
     final payload = ApiPayload.unwrapObject(response.data);
-    final token = payload['token'] as String?;
+    final token = _readOptionalAccessToken(payload);
     final needsVerification = payload['needsVerification'] == true;
     final emailVerificationPending = payload['emailVerificationPending'] == true;
     final message = response.data['message']?.toString();
@@ -91,7 +91,7 @@ class AuthRepositoryImpl implements AuthRepository {
     });
 
     final payload = ApiPayload.unwrapObject(response.data);
-    final token = payload['token'] as String;
+    final token = _readAccessToken(payload);
     await _saveToken(token);
 
     final user = _mapResponseToUser(payload);
@@ -120,7 +120,7 @@ class AuthRepositoryImpl implements AuthRepository {
       });
 
       final payload = ApiPayload.unwrapObject(response.data);
-      final token = payload['token'] as String;
+      final token = _readAccessToken(payload);
       await _saveToken(token);
 
       final user = _mapResponseToUser(payload);
@@ -233,15 +233,17 @@ class AuthRepositoryImpl implements AuthRepository {
     );
     return AppUser(
       id: userData['id'] ?? '',
-      fullName: userData['full_name'],
-      avatarUrl: userData['avatar_url'],
+      fullName: userData['full_name'] ?? userData['fullName'],
+      avatarUrl: userData['avatar_url'] ?? userData['avatarUrl'],
       bio: userData['bio'],
       country: userData['country'],
       email: userData['email'],
       role: _parseRole(userData['role']),
       interests: _parseStringList(userData['interests']),
-      isPublicProfile: userData['is_public_profile'] ?? true,
+      isPublicProfile: userData['is_public_profile'] ?? userData['isPublicProfile'] ?? true,
       isSudanAwarenessMember: userData['is_sudan_awareness_member'] ?? false,
+      isVerified: userData['is_verified'] ?? userData['isVerified'] ?? false,
+      status: userData['status']?.toString() ?? 'active',
       facebookUrl: userData['facebook_url'],
       tiktokUrl: userData['tiktok_url'],
       instagramUrl: userData['instagram_url'],
@@ -255,9 +257,32 @@ class AuthRepositoryImpl implements AuthRepository {
       'admin' => UserRole.admin,
       'moderator' => UserRole.moderator,
       'trainer' => UserRole.trainer,
-      'member' => UserRole.student,
-      _ => UserRole.student,
+      'member' => UserRole.member,
+      'student' => UserRole.member,
+      _ => UserRole.member,
     };
+  }
+
+  static String _readAccessToken(Map<String, dynamic> payload) {
+    final token = _readOptionalAccessToken(payload);
+    if (token == null || token.isEmpty) {
+      throw Exception('تعذر العثور على access token صالح في استجابة الخادم.');
+    }
+    return token;
+  }
+
+  static String? _readOptionalAccessToken(Map<String, dynamic> payload) {
+    final accessToken = payload['accessToken']?.toString();
+    if (accessToken != null && accessToken.isNotEmpty) {
+      return accessToken;
+    }
+
+    final legacyToken = payload['token']?.toString();
+    if (legacyToken != null && legacyToken.isNotEmpty) {
+      return legacyToken;
+    }
+
+    return null;
   }
 
   static List<String> _parseStringList(dynamic value) {

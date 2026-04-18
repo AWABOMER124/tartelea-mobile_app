@@ -1,32 +1,48 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../data/models/community_models.dart';
 import '../providers/auth_provider.dart';
-import '../providers/post_provider.dart';
+import '../providers/community_provider.dart';
 import '../providers/theme_provider.dart';
 
-class CommunityScreen extends ConsumerWidget {
+class CommunityScreen extends ConsumerStatefulWidget {
   const CommunityScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CommunityScreen> createState() => _CommunityScreenState();
+}
+
+class _CommunityScreenState extends ConsumerState<CommunityScreen> {
+  String? _selectedContextId;
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = ref.watch(themeProvider) == ThemeMode.dark;
-    final postsAsync = ref.watch(postsProvider(null));
+    final user = ref.watch(userProvider);
+    final contextsAsync = ref.watch(communityContextsProvider);
+    final contexts = contextsAsync.asData?.value ?? const <CommunityContextModel>[];
+    final activeContextId = _resolveActiveContextId(contexts);
+    final feedAsync = ref.watch(communityFeedProvider(activeContextId));
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('المجتمع التفاعلي'),
+        title: const Text('المجتمع'),
         actions: [
           IconButton(
+            onPressed: () => _showCreatePostSheet(
+              context: context,
+              isDark: isDark,
+              contexts: contexts,
+              activeContextId: activeContextId,
+            ),
             icon: Icon(
               Icons.add_comment_outlined,
               color: AppColors.appBarForeground(isDark),
             ),
-            onPressed: () => _showCreatePostSheet(context, ref, isDark),
           ),
         ],
       ),
@@ -34,76 +50,136 @@ class CommunityScreen extends ConsumerWidget {
         decoration: BoxDecoration(
           gradient: AppColors.screenGradient(isDark),
         ),
-        child: postsAsync.when(
-          data: (posts) => ListView(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-            children: [
-              _buildCreatePostBox(context, ref, isDark),
-              const SizedBox(height: 18),
-              if (posts.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: Text(
-                      'لا يوجد منشورات حالياً',
-                      style: TextStyle(color: AppColors.textSecondary(isDark)),
-                    ),
-                  ),
-                )
-              else
-                ...posts.map((post) => _PostCard(post: post, isDark: isDark)),
-            ],
-          ),
-          loading: () => Center(
-            child: CircularProgressIndicator(
-              color: isDark ? AppColors.darkPrimary : AppColors.primary,
-            ),
-          ),
-          error: (err, _) => Center(
-            child: Text(
-              'خطأ: $err',
-              style: TextStyle(color: AppColors.textPrimary(isDark)),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCreatePostBox(BuildContext context, WidgetRef ref, bool isDark) {
-    return InkWell(
-      onTap: () => _showCreatePostSheet(context, ref, isDark),
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: AppColors.panelColor(isDark),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.borderColor(isDark)),
-        ),
-        child: Row(
+        child: Column(
           children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: AppColors.subtleFill(isDark),
-              child: Icon(
-                Icons.person_rounded,
-                color: AppColors.appBarForeground(isDark),
-              ),
+            _ContextStrip(
+              isDark: isDark,
+              contextsAsync: contextsAsync,
+              selectedContextId: activeContextId,
+              onSelected: (contextId) {
+                setState(() {
+                  _selectedContextId = contextId;
+                });
+              },
             ),
-            const SizedBox(width: 12),
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.subtleFill(isDark),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'ماذا يدور في ذهنك؟',
-                  style: TextStyle(
-                    color: AppColors.textSecondary(isDark),
-                    fontSize: 13,
+              child: RefreshIndicator(
+                color: isDark ? AppColors.darkPrimary : AppColors.primary,
+                onRefresh: () async {
+                  ref.invalidate(communityContextsProvider);
+                  ref.invalidate(communityFeedProvider(activeContextId));
+                },
+                child: feedAsync.when(
+                  data: (feed) {
+                    final allItems = <Widget>[
+                      const SizedBox(height: 12),
+                      _CreatePostBox(
+                        isDark: isDark,
+                        enabled: user != null && contexts.isNotEmpty,
+                        onTap: () => _showCreatePostSheet(
+                          context: context,
+                          isDark: isDark,
+                          contexts: contexts,
+                          activeContextId: activeContextId,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ];
+
+                    if (feed.pinnedItems.isNotEmpty) {
+                      allItems.add(
+                        _SectionLabel(
+                          isDark: isDark,
+                          title: 'منشورات مثبتة',
+                          icon: Icons.push_pin_outlined,
+                        ),
+                      );
+                      allItems.add(const SizedBox(height: 10));
+                      allItems.addAll(
+                        feed.pinnedItems.map(
+                          (post) => _CommunityPostCard(
+                            post: post,
+                            isDark: isDark,
+                            isPinned: true,
+                            onTap: () => context.push('/community/post/${post.id}'),
+                            onLike: () => _togglePostLike(
+                              context: context,
+                              post: post,
+                              activeContextId: activeContextId,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    if (feed.items.isNotEmpty) {
+                      allItems.add(
+                        _SectionLabel(
+                          isDark: isDark,
+                          title: 'أحدث النقاشات',
+                          icon: Icons.forum_outlined,
+                        ),
+                      );
+                      allItems.add(const SizedBox(height: 10));
+                      allItems.addAll(
+                        feed.items.map(
+                          (post) => _CommunityPostCard(
+                            post: post,
+                            isDark: isDark,
+                            onTap: () => context.push('/community/post/${post.id}'),
+                            onLike: () => _togglePostLike(
+                              context: context,
+                              post: post,
+                              activeContextId: activeContextId,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    if (feed.pinnedItems.isEmpty && feed.items.isEmpty) {
+                      allItems.add(
+                        _EmptyState(
+                          isDark: isDark,
+                          title: user == null ? 'سجّل دخولك للانضمام إلى المجتمع' : 'لا توجد منشورات بعد',
+                          subtitle: user == null
+                              ? 'المجتمع يبدأ بعد تسجيل الدخول، وستظهر لك المساحات المتاحة لك مباشرة.'
+                              : 'ابدأ أول منشور في هذه المساحة وشارك سؤالًا أو فائدة أو تدبرًا.',
+                        ),
+                      );
+                    }
+
+                    allItems.add(const SizedBox(height: 24));
+
+                    return ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      children: allItems,
+                    );
+                  },
+                  loading: () => ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      const SizedBox(height: 80),
+                      Center(
+                        child: CircularProgressIndicator(
+                          color: isDark ? AppColors.darkPrimary : AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  error: (error, _) => ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      const SizedBox(height: 80),
+                      _EmptyState(
+                        isDark: isDark,
+                        title: 'تعذر تحميل المجتمع',
+                        subtitle: error.toString().replaceFirst('Exception: ', ''),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -114,24 +190,74 @@ class CommunityScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showCreatePostSheet(
-    BuildContext context,
-    WidgetRef ref,
-    bool isDark,
-  ) async {
+  String? _resolveActiveContextId(List<CommunityContextModel> contexts) {
+    if (_selectedContextId != null && contexts.any((item) => item.id == _selectedContextId)) {
+      return _selectedContextId;
+    }
+    if (contexts.isNotEmpty) {
+      return contexts.first.id;
+    }
+    return null;
+  }
+
+  Future<void> _togglePostLike({
+    required BuildContext context,
+    required CommunityPostModel post,
+    required String? activeContextId,
+  }) async {
     final user = ref.read(userProvider);
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('سجل الدخول أولاً لإنشاء منشور.')),
+        const SnackBar(content: Text('سجل دخولك أولًا للتفاعل داخل المجتمع.')),
       );
       context.go('/auth');
       return;
     }
 
+    try {
+      await ref.read(communityRepositoryProvider).setPostLike(
+            postId: post.id,
+            active: !post.viewerState.liked,
+          );
+      ref.invalidate(communityFeedProvider(activeContextId));
+      ref.invalidate(communityPostDetailsProvider(post.id));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  Future<void> _showCreatePostSheet({
+    required BuildContext context,
+    required bool isDark,
+    required List<CommunityContextModel> contexts,
+    required String? activeContextId,
+  }) async {
+    final user = ref.read(userProvider);
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('سجل دخولك أولًا لإنشاء منشور جديد.')),
+      );
+      context.go('/auth');
+      return;
+    }
+
+    if (contexts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد مساحة مجتمع متاحة لهذا الحساب الآن.')),
+      );
+      return;
+    }
+
     final messenger = ScaffoldMessenger.of(context);
+    final initialContextId = activeContextId ?? contexts.first.id;
+    String selectedContextId = initialContextId;
     String title = '';
     String body = '';
-    String category = 'general';
     bool isSubmitting = false;
 
     await showModalBottomSheet<void>(
@@ -140,18 +266,11 @@ class CommunityScreen extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(
-          builder: (context, setSheetState) {
+          builder: (sheetContext, setSheetState) {
             Future<void> submit() async {
-              if (title.trim().length < 5) {
+              if (body.trim().length < 3) {
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('عنوان المنشور يجب أن يكون 5 أحرف على الأقل.')),
-                );
-                return;
-              }
-
-              if (body.trim().length < 10) {
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('محتوى المنشور يجب أن يكون 10 أحرف على الأقل.')),
+                  const SnackBar(content: Text('اكتب نص المنشور أولًا.')),
                 );
                 return;
               }
@@ -159,26 +278,33 @@ class CommunityScreen extends ConsumerWidget {
               setSheetState(() => isSubmitting = true);
 
               try {
-                final post = await ref.read(postRepositoryProvider).createPost(
-                      title: title.trim(),
+                await ref.read(communityRepositoryProvider).createPost(
+                      primaryContextId: selectedContextId,
+                      title: title.trim().isEmpty ? null : title.trim(),
                       body: body.trim(),
-                      category: category,
                     );
 
-                if (post == null) {
-                  throw Exception('تعذر إنشاء المنشور.');
+                ref.invalidate(communityFeedProvider(selectedContextId));
+                ref.invalidate(communityContextsProvider);
+
+                if (mounted) {
+                  setState(() {
+                    _selectedContextId = selectedContextId;
+                  });
                 }
 
-                ref.invalidate(postsProvider(null));
                 if (sheetContext.mounted) {
                   Navigator.of(sheetContext).pop();
                 }
+
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('تم إنشاء المنشور بنجاح.')),
+                  const SnackBar(content: Text('تم نشر المنشور بنجاح.')),
                 );
               } catch (error) {
                 messenger.showSnackBar(
-                  SnackBar(content: Text(_errorMessage(error))),
+                  SnackBar(
+                    content: Text(error.toString().replaceFirst('Exception: ', '')),
+                  ),
                 );
               } finally {
                 if (sheetContext.mounted) {
@@ -206,7 +332,7 @@ class CommunityScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'إنشاء منشور جديد',
+                      'منشور جديد',
                       style: TextStyle(
                         color: AppColors.textPrimary(isDark),
                         fontSize: 18,
@@ -214,41 +340,46 @@ class CommunityScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedContextId,
+                      decoration: const InputDecoration(
+                        labelText: 'المساحة',
+                      ),
+                      items: contexts
+                          .map(
+                            (item) => DropdownMenuItem(
+                              value: item.id,
+                              child: Text(item.title),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: isSubmitting
+                          ? null
+                          : (value) {
+                              if (value == null) {
+                                return;
+                              }
+                              setSheetState(() {
+                                selectedContextId = value;
+                              });
+                            },
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
                       enabled: !isSubmitting,
                       onChanged: (value) => title = value,
                       decoration: const InputDecoration(
-                        labelText: 'عنوان المنشور',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: category,
-                      items: const [
-                        DropdownMenuItem(value: 'general', child: Text('عام')),
-                        DropdownMenuItem(value: 'quran', child: Text('قرآن')),
-                        DropdownMenuItem(value: 'awareness', child: Text('توعية')),
-                        DropdownMenuItem(value: 'sudan_awareness', child: Text('السودان')),
-                      ],
-                      onChanged: isSubmitting
-                          ? null
-                          : (value) {
-                              if (value != null) {
-                                setSheetState(() => category = value);
-                              }
-                            },
-                      decoration: const InputDecoration(
-                        labelText: 'التصنيف',
+                        labelText: 'عنوان مختصر اختياري',
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       enabled: !isSubmitting,
                       minLines: 4,
-                      maxLines: 6,
+                      maxLines: 7,
                       onChanged: (value) => body = value,
                       decoration: const InputDecoration(
-                        labelText: 'محتوى المنشور',
+                        labelText: 'اكتب منشورك',
                         alignLabelWithHint: true,
                       ),
                     ),
@@ -275,152 +406,319 @@ class CommunityScreen extends ConsumerWidget {
       },
     );
   }
-
-  String _errorMessage(Object error) {
-    if (error is DioException) {
-      final data = error.response?.data;
-      if (data is Map<String, dynamic>) {
-        return (data['message'] ?? data['error']?['message'] ?? 'تعذر إنشاء المنشور.')
-            .toString();
-      }
-      return error.message ?? 'تعذر إنشاء المنشور.';
-    }
-
-    return error.toString().replaceFirst('Exception: ', '');
-  }
 }
 
-class _PostCard extends StatelessWidget {
-  final dynamic post;
+class _ContextStrip extends StatelessWidget {
   final bool isDark;
+  final AsyncValue<List<CommunityContextModel>> contextsAsync;
+  final String? selectedContextId;
+  final ValueChanged<String> onSelected;
 
-  const _PostCard({
-    required this.post,
+  const _ContextStrip({
     required this.isDark,
+    required this.contextsAsync,
+    required this.selectedContextId,
+    required this.onSelected,
   });
 
   @override
   Widget build(BuildContext context) {
+    return SizedBox(
+      height: 64,
+      child: contextsAsync.when(
+        data: (contexts) {
+          if (contexts.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'ستظهر مساحات المجتمع هنا عندما تتوفر لحسابك.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary(isDark),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          return ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
+            itemBuilder: (context, index) {
+              final item = contexts[index];
+              final isSelected = item.id == selectedContextId;
+              return ChoiceChip(
+                label: Text(item.title),
+                selected: isSelected,
+                onSelected: (_) => onSelected(item.id),
+                labelStyle: TextStyle(
+                  color: isSelected
+                      ? AppColors.accentForeground(isDark)
+                      : AppColors.textPrimary(isDark),
+                  fontWeight: FontWeight.w700,
+                ),
+                backgroundColor: AppColors.panelColor(isDark),
+                selectedColor: isDark ? AppColors.darkPrimary : AppColors.accent,
+                side: BorderSide(color: AppColors.borderColor(isDark)),
+              );
+            },
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemCount: contexts.length,
+          );
+        },
+        loading: () => const Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+        error: (_, __) => const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+class _CreatePostBox extends StatelessWidget {
+  final bool isDark;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _CreatePostBox({
+    required this.isDark,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.panelColor(isDark),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.borderColor(isDark)),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: AppColors.subtleFill(isDark),
+              child: Icon(
+                Icons.edit_note_outlined,
+                color: AppColors.appBarForeground(isDark),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                enabled ? 'اكتب منشورًا جديدًا أو سؤالًا للمجتمع' : 'سجل الدخول أولًا لبدء المشاركة',
+                style: TextStyle(
+                  color: AppColors.textSecondary(isDark),
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final bool isDark;
+  final String title;
+  final IconData icon;
+
+  const _SectionLabel({
+    required this.isDark,
+    required this.title,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 18,
+          color: AppColors.appBarForeground(isDark),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            color: AppColors.textPrimary(isDark),
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CommunityPostCard extends StatelessWidget {
+  final CommunityPostModel post;
+  final bool isDark;
+  final bool isPinned;
+  final VoidCallback onTap;
+  final VoidCallback onLike;
+
+  const _CommunityPostCard({
+    required this.post,
+    required this.isDark,
+    required this.onTap,
+    required this.onLike,
+    this.isPinned = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = DateFormat('dd MMM yyyy - HH:mm');
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: AppColors.panelColor(isDark),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.borderColor(isDark)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.subtleFill(isDark),
-                child: Icon(
-                  Icons.person_rounded,
-                  color: AppColors.appBarForeground(isDark),
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Text(
-                    (post.authorName ?? '').toString().trim().isEmpty
-                        ? 'مستخدم ترتيل'
-                        : post.authorName,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: AppColors.textPrimary(isDark),
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: AppColors.subtleFill(isDark),
+                    backgroundImage: post.author.avatarUrl != null
+                        ? NetworkImage(post.author.avatarUrl!)
+                        : null,
+                    child: post.author.avatarUrl == null
+                        ? Icon(
+                            Icons.person_rounded,
+                            color: AppColors.appBarForeground(isDark),
+                            size: 18,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          post.author.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: AppColors.textPrimary(isDark),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          formatter.format(post.createdAt),
+                          style: TextStyle(
+                            color: AppColors.textSecondary(isDark),
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Text(
-                    DateFormat('MMM dd, yyyy').format(post.createdAt),
-                    style: TextStyle(
-                      color: AppColors.textSecondary(isDark),
-                      fontSize: 10,
+                  if (isPinned)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 8),
+                      child: Icon(
+                        Icons.push_pin_outlined,
+                        size: 18,
+                        color: isDark ? AppColors.darkPrimary : AppColors.accent,
+                      ),
+                    ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.subtleFill(isDark),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      post.primaryContext.title,
+                      style: TextStyle(
+                        color: AppColors.appBarForeground(isDark),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.subtleFill(isDark),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  post.category,
+              if ((post.title ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  post.title!,
                   style: TextStyle(
-                    color: AppColors.appBarForeground(isDark),
-                    fontSize: 10,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary(isDark),
                   ),
                 ),
+              ],
+              const SizedBox(height: 10),
+              Text(
+                post.body,
+                style: TextStyle(
+                  color: AppColors.textSecondary(isDark),
+                  fontSize: 13,
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _ActionButton(
+                    icon: post.viewerState.liked ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
+                    label: '${post.counts.reactions}',
+                    color: post.viewerState.liked
+                        ? (isDark ? AppColors.darkPrimary : AppColors.accent)
+                        : AppColors.textSecondary(isDark),
+                    onTap: onLike,
+                  ),
+                  const SizedBox(width: 20),
+                  _ActionButton(
+                    icon: Icons.chat_bubble_outline,
+                    label: '${post.counts.comments}',
+                    color: AppColors.textSecondary(isDark),
+                    onTap: onTap,
+                  ),
+                  if (post.isLocked) ...[
+                    const Spacer(),
+                    Text(
+                      'التعليقات مغلقة',
+                      style: TextStyle(
+                        color: AppColors.warning,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            post.title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary(isDark),
-            ),
-          ),
-          if (post.body != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              post.body!,
-              style: TextStyle(
-                color: AppColors.textSecondary(isDark),
-                fontSize: 13,
-                height: 1.6,
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _ActionButton(
-                icon: Icons.thumb_up_alt_outlined,
-                label: 'أعجبني',
-                color: AppColors.textSecondary(isDark),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('ميزة التفاعل ستتفعّل في التحديث القادم.'),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(width: 24),
-              _ActionButton(
-                icon: Icons.chat_bubble_outline,
-                label: 'تعليق',
-                color: AppColors.textSecondary(isDark),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('ميزة التعليقات من التطبيق ستتفعّل قريبًا.'),
-                    ),
-                  );
-                },
-              ),
-              const Spacer(),
-              Icon(
-                Icons.share_outlined,
-                size: 18,
-                color: AppColors.textSecondary(isDark),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -450,6 +748,59 @@ class _ActionButton extends StatelessWidget {
           Text(
             label,
             style: TextStyle(color: color, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final bool isDark;
+  final String title;
+  final String subtitle;
+
+  const _EmptyState({
+    required this.isDark,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 20),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: AppColors.panelColor(isDark),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.borderColor(isDark)),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.forum_outlined,
+            color: AppColors.appBarForeground(isDark),
+            size: 30,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textPrimary(isDark),
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textSecondary(isDark),
+              height: 1.6,
+            ),
           ),
         ],
       ),

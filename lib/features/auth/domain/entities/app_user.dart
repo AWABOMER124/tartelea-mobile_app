@@ -1,5 +1,5 @@
 enum UserRole {
-  student,
+  member,
   trainer,
   moderator,
   admin,
@@ -16,6 +16,8 @@ class AppUser {
   final List<String> interests;
   final bool isPublicProfile;
   final bool isSudanAwarenessMember;
+  final bool isVerified;
+  final String status;
   final String? facebookUrl;
   final String? tiktokUrl;
   final String? instagramUrl;
@@ -33,6 +35,8 @@ class AppUser {
     this.interests = const [],
     this.isPublicProfile = true,
     this.isSudanAwarenessMember = false,
+    this.isVerified = false,
+    this.status = 'active',
     this.facebookUrl,
     this.tiktokUrl,
     this.instagramUrl,

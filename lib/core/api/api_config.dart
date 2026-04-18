@@ -37,7 +37,12 @@ class ApiConfig {
   // User & Social endpoints
   static const String profiles = '/profiles/';
   static const String posts = '/posts';
+  static const String community = '/community';
+  static const String communityContexts = '$community/contexts';
+  static const String communityFeed = '$community/feed';
+  static const String communityPosts = '$community/posts';
+  static const String communitySessionQuestions = '$community/session-questions';
+  static const String sessions = '/sessions';
   static const String workshops = '/workshops';
   static const String subscriptions = '/subscriptions/';
-  static const String livekitToken = '/livekit/token';
 }
