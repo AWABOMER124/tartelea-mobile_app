@@ -1,8 +1,8 @@
 class ApiConfig {
   static const String defaultBaseUrl =
-      'http://localhost:3000/api/v1';
+      'https://api.tartelea.com/api/v1';
   static const String defaultLivekitBaseUrl =
-      'ws://localhost:7880';
+      'wss://rtc.tartelea.com';
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: defaultBaseUrl,
@@ -18,7 +18,7 @@ class ApiConfig {
   );
   static const bool subscriptionsPaused = bool.fromEnvironment(
     'SUBSCRIPTIONS_PAUSED',
-    defaultValue: true,
+    defaultValue: false,
   );
 
   // Auth endpoints

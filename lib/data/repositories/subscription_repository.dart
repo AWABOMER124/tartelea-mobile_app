@@ -1,54 +1,47 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_payload.dart';
-import '../models/subscription_model.dart';
+import '../models/subscription_contract.dart';
 
 class SubscriptionRepository {
   final ApiClient _api;
-  final SupabaseClient _supabase;
 
-  SubscriptionRepository(this._api, this._supabase);
+  SubscriptionRepository(this._api);
 
-  /// Get subscription info from Node.js backend
-  Future<SubscriptionModel?> getUserSubscription(String userId) async {
+  /// Backend-owned subscription contract (single source of truth).
+  Future<SubscriptionContract?> getMySubscription() async {
     try {
-      final response = await _api.get('/subscriptions/$userId');
-      final payload = ApiPayload.unwrap(response.data);
-      if (payload == null) return null;
-      return SubscriptionModel.fromJson(payload);
+      final response = await _api.get('/subscriptions/me');
+      final payload = ApiPayload.unwrapObject(response.data);
+      return SubscriptionContract.fromJson(payload);
     } catch (_) {
       return null;
     }
   }
 
-  /// Verify a PayPal subscription via Supabase Edge Function
+  /// Verify a PayPal subscription through the backend compatibility gateway.
+  /// The backend may mint/extend the monthly subscription if the provider returns ACTIVE.
   Future<bool> verifyPayPalSubscription(String subscriptionId) async {
     try {
-      final response = await _supabase.functions.invoke(
-        'paypal-subscription',
-        body: {
-          'action': 'verify',
-          'subscriptionId': subscriptionId,
-        },
-      );
-      
-      return response.data['success'] == true && response.data['active'] == true;
-    } catch (e) {
-      // Internal error logging
+      final response = await _api.post('/compat/functions/paypal-subscription', data: {
+        'action': 'verify',
+        'subscriptionId': subscriptionId,
+      });
+
+      final payload = ApiPayload.unwrapObject(response.data);
+      return payload['success'] == true && payload['active'] == true;
+    } catch (_) {
       return false;
     }
   }
 
-  /// Check if user has an active subscription directly from Supabase
+  /// Check monthly subscription status through the backend compatibility gateway.
   Future<Map<String, dynamic>> checkActiveSubscription() async {
     try {
-      final response = await _supabase.functions.invoke(
-        'paypal-subscription',
-        body: {'action': 'check'},
-      );
-      return response.data;
-    } catch (e) {
-      // Internal error logging
+      final response = await _api.post('/compat/functions/paypal-subscription', data: {
+        'action': 'check',
+      });
+      return ApiPayload.unwrapObject(response.data);
+    } catch (_) {
       return {'success': false, 'hasSubscription': false};
     }
   }

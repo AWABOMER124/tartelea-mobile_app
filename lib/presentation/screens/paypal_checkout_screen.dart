@@ -47,7 +47,7 @@ class _PayPalCheckoutScreenState extends ConsumerState<PayPalCheckoutScreen> {
 
   void _onSubscriptionApproved(String subscriptionId) async {
     setState(() => _isLoading = true);
-    final success = await ref.read(subscriptionStatusProvider.notifier).verify(subscriptionId);
+    final success = await ref.read(subscriptionContractProvider.notifier).verify(subscriptionId);
     
     if (mounted) {
       if (success) {
