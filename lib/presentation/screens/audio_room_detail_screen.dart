@@ -26,8 +26,7 @@ class AudioRoomDetailScreen extends ConsumerStatefulWidget {
       _AudioRoomDetailScreenState();
 }
 
-class _AudioRoomDetailScreenState
-    extends ConsumerState<AudioRoomDetailScreen> {
+class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
   SessionDetailsModel? _details;
   bool _loading = true;
   bool _joiningLive = false;
@@ -187,6 +186,7 @@ class _AudioRoomDetailScreenState
           setState(() {});
         }
       }
+
       room.addListener(listener);
       _roomListener = listener;
 
@@ -406,6 +406,24 @@ class _AudioRoomDetailScreenState
       'ended' => 'منتهية',
       _ => 'قيد الجدولة',
     };
+    final statusColor = switch (details.session.status) {
+      'live' => const Color(0xFFFF3B30),
+      'ended' => Colors.white.withAlpha(190),
+      _ => isDark ? AppColors.darkPrimary : AppColors.accent,
+    };
+    final activeSpeakerIds = _room?.activeSpeakers
+            .map((participant) => participant.identity)
+            .toSet() ??
+        <String>{};
+
+    final preview = <SessionParticipantModel>[];
+    final seen = <String>{};
+    for (final participant in details.participants) {
+      if (participant.id.isEmpty) continue;
+      if (!seen.add(participant.id)) continue;
+      preview.add(participant);
+      if (preview.length >= 6) break;
+    }
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -418,8 +436,38 @@ class _AudioRoomDetailScreenState
         children: [
           Row(
             children: [
-              _heroChip(statusLabel),
-              const Spacer(),
+              _heroAvatar(
+                details.room.host.avatarUrl,
+                isActive: activeSpeakerIds.contains(details.room.hostId),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      details.room.host.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      statusLabel,
+                      style: TextStyle(
+                        color: Colors.white.withAlpha(210),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _statusDot(statusColor),
+              const SizedBox(width: 10),
               Icon(
                 details.session.visibility == 'restricted'
                     ? Icons.lock_outline
@@ -427,6 +475,8 @@ class _AudioRoomDetailScreenState
                 color: Colors.white,
                 size: 18,
               ),
+              const Spacer(),
+              _heroChip('${details.participants.length} مشارك'),
             ],
           ),
           const SizedBox(height: 14),
@@ -449,12 +499,12 @@ class _AudioRoomDetailScreenState
             ),
           ],
           const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
+          Row(
             children: [
-              _heroChip(details.room.host.name),
-              _heroChip('${details.participants.length} مشارك'),
+              Expanded(
+                  child:
+                      _heroAvatarStack(preview, activeSpeakerIds, statusColor)),
+              const SizedBox(width: 12),
               _heroChip(dateLabel),
             ],
           ),
@@ -489,8 +539,7 @@ class _AudioRoomDetailScreenState
             children: [
               _infoChip(isDark, Icons.badge_outlined,
                   'دورك: ${_roomRoleLabel(details.access.roomRole)}'),
-              _infoChip(
-                  isDark, Icons.headphones_outlined, connectionLabel),
+              _infoChip(isDark, Icons.headphones_outlined, connectionLabel),
               _infoChip(
                 isDark,
                 Icons.how_to_reg_outlined,
@@ -500,7 +549,9 @@ class _AudioRoomDetailScreenState
           ),
           const SizedBox(height: 12),
           Text(
-            !userSignedIn ? 'سجل الدخول أولًا لعرض وصولك الفعلي.' : _accessMessage(details),
+            !userSignedIn
+                ? 'سجل الدخول أولًا لعرض وصولك الفعلي.'
+                : _accessMessage(details),
             style: TextStyle(
               color: AppColors.textSecondary(isDark),
               height: 1.6,
@@ -537,106 +588,140 @@ class _AudioRoomDetailScreenState
         .firstOrNull;
     final hasRaisedHand = currentParticipant?.hasRaisedHand ?? false;
 
-    final buttons = <Widget>[];
+    String primaryLabel = 'غير متاح';
+    IconData primaryIcon = Icons.lock_outline;
+    VoidCallback? primaryAction;
+    bool primaryOutlined = true;
+    Color primaryColor = isDark ? AppColors.darkPrimary : AppColors.accent;
+
+    final secondaryButtons = <Widget>[];
 
     if (!userSignedIn && details.access.denialReason == 'AUTH_REQUIRED') {
-      buttons.add(_actionButton('تسجيل الدخول', Icons.login, () => context.go('/auth')));
+      primaryLabel = 'تسجيل الدخول';
+      primaryIcon = Icons.login;
+      primaryAction = () => context.go('/auth');
+      primaryOutlined = false;
     } else if (details.session.isLive) {
-      buttons.add(
-        _actionButton(
-          isConnected ? 'أنت داخل البث' : (_joiningLive ? 'جارٍ تجهيز الدخول' : 'ادخل البث'),
-          Icons.radio,
-          _joiningLive || isConnected ? null : _joinLiveRoom,
-          destructive: true,
-        ),
-      );
-    } else if (details.access.isRegistered) {
-      buttons.add(
-        _actionButton(
-          'إلغاء التسجيل',
-          Icons.event_busy_outlined,
-          _leaveSession,
-          outlined: true,
-        ),
-      );
-    } else if (details.access.canJoin) {
-      buttons.add(_actionButton('سجل الآن', Icons.event_available_outlined, _registerForSession));
-    }
+      primaryLabel = isConnected
+          ? 'أنت داخل الغرفة'
+          : (_joiningLive ? 'جارٍ تجهيز الدخول' : 'انضم للبث');
+      primaryIcon = Icons.headphones_outlined;
+      primaryAction = _joiningLive || isConnected ? null : _joinLiveRoom;
+      primaryOutlined = false;
+      primaryColor = const Color(0xFFFF3B30);
 
-    if (details.access.canStartSession) {
-      buttons.add(
-        _actionButton(
-          'ابدأ البث',
-          Icons.play_circle_outline,
-          () => _runRoomAction(
+      if (details.access.canEndSession) {
+        secondaryButtons.add(
+          _actionButton(
+            'إنهاء الجلسة',
+            Icons.stop_circle_outlined,
+            () => _runRoomAction(
+              action: 'end_session',
+              successMessage: 'تم إنهاء الجلسة.',
+              disconnectAfter: true,
+            ),
+            outlined: true,
+          ),
+        );
+      }
+
+      if (isConnected && details.access.canPublish) {
+        secondaryButtons.add(
+          _actionButton(
+            micEnabled ? 'كتم الميكروفون' : 'فتح الميكروفون',
+            micEnabled ? Icons.mic_off_outlined : Icons.mic_none_outlined,
+            _toggleMicrophone,
+            outlined: true,
+          ),
+        );
+      }
+
+      if (details.access.isRegistered && !details.access.canSpeak) {
+        secondaryButtons.add(
+          _actionButton(
+            hasRaisedHand ? 'إلغاء رفع اليد' : 'رفع اليد',
+            Icons.pan_tool_alt_outlined,
+            hasRaisedHand
+                ? () => _runRoomAction(
+                      action: 'lower_hand',
+                      successMessage: 'تم إلغاء طلب التحدث.',
+                    )
+                : () => _runRoomAction(
+                      action: 'raise_hand',
+                      successMessage: 'تم إرسال طلب التحدث.',
+                    ),
+            outlined: true,
+          ),
+        );
+      }
+    } else if (details.access.canStartSession) {
+      primaryLabel = 'ابدأ البث';
+      primaryIcon = Icons.play_circle_outline;
+      primaryAction = () => _runRoomAction(
             action: 'start_live',
             successMessage: 'تم بدء البث الصوتي.',
-          ),
-        ),
-      );
-    }
-
-    if (details.access.canEndSession) {
-      buttons.add(
-        _actionButton(
-          'إنهاء الجلسة',
-          Icons.stop_circle_outlined,
-          () => _runRoomAction(
-            action: 'end_session',
-            successMessage: 'تم إنهاء الجلسة.',
-            disconnectAfter: true,
-          ),
-          outlined: true,
-        ),
-      );
-    }
-
-    if (isConnected && details.access.canPublish) {
-      buttons.add(
-        _actionButton(
-          micEnabled ? 'كتم الميكروفون' : 'فتح الميكروفون',
-          micEnabled ? Icons.mic_off_outlined : Icons.mic_none_outlined,
-          _toggleMicrophone,
-          outlined: true,
-        ),
-      );
-    }
-
-    if (details.session.isLive &&
-        details.access.isRegistered &&
-        !details.access.canSpeak) {
-      buttons.add(
-        _actionButton(
-          hasRaisedHand ? 'إلغاء رفع اليد' : 'رفع اليد',
-          Icons.pan_tool_alt_outlined,
-          hasRaisedHand
-              ? () => _runRoomAction(
-                    action: 'lower_hand',
-                    successMessage: 'تم إلغاء طلب التحدث.',
-                  )
-              : () => _runRoomAction(
-                    action: 'raise_hand',
-                    successMessage: 'تم إرسال طلب التحدث.',
-                  ),
-          outlined: true,
-        ),
-      );
+          );
+      primaryOutlined = false;
+      primaryColor = const Color(0xFFFF3B30);
+    } else if (details.access.isRegistered) {
+      primaryLabel = 'إلغاء التسجيل';
+      primaryIcon = Icons.event_busy_outlined;
+      primaryAction = _leaveSession;
+      primaryOutlined = true;
+    } else if (details.access.canJoin) {
+      primaryLabel = 'سجل الآن';
+      primaryIcon = Icons.event_available_outlined;
+      primaryAction = _registerForSession;
+      primaryOutlined = false;
     }
 
     return _sectionCard(
       isDark: isDark,
       title: 'الإجراءات',
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: buttons.isEmpty
-            ? [
-                Text(
-                  'لا توجد إجراءات متاحة الآن لهذه الجلسة.',
-                  style: TextStyle(color: AppColors.textSecondary(isDark)),
-                ),
-              ]
-            : buttons,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 52,
+            child: primaryOutlined
+                ? OutlinedButton.icon(
+                    onPressed: primaryAction,
+                    icon: Icon(primaryIcon, size: 20),
+                    label: Text(primaryLabel),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.appBarForeground(isDark),
+                      side: BorderSide(color: AppColors.borderColor(isDark)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  )
+                : ElevatedButton.icon(
+                    onPressed: primaryAction,
+                    icon: Icon(primaryIcon, size: 20),
+                    label: Text(primaryLabel),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: primaryColor.withAlpha(140),
+                      disabledForegroundColor: Colors.white.withAlpha(210),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+          ),
+          if (secondaryButtons.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: secondaryButtons,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -700,97 +785,137 @@ class _AudioRoomDetailScreenState
     SessionDetailsModel details,
     String currentUserId,
   ) {
-    final activeSpeakerIds =
-        _room?.activeSpeakers.map((participant) => participant.identity).toSet() ??
-            <String>{};
+    final activeSpeakerIds = _room?.activeSpeakers
+            .map((participant) => participant.identity)
+            .toSet() ??
+        <String>{};
+    final highlight = isDark ? AppColors.darkPrimary : AppColors.accent;
 
     return _sectionCard(
       isDark: isDark,
       title: 'المشاركون',
       child: Column(
-        children: details.participants
-            .map(
-              (participant) => Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.subtleFill(isDark),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Row(
-                  children: [
-                    _avatar(isDark, participant.avatarUrl),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  participant.name,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary(isDark),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              if (participant.id == currentUserId) ...[
-                                const SizedBox(width: 6),
-                                Text(
-                                  '(أنت)',
-                                  style: TextStyle(
-                                    color: AppColors.textSecondary(isDark),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ],
+        children: [
+          if (details.participants.isNotEmpty) ...[
+            SizedBox(
+              height: 54,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemBuilder: (context, index) {
+                  final participant = details.participants[index];
+                  final isActive = activeSpeakerIds.contains(participant.id);
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isActive ? highlight : Colors.transparent,
+                            width: 2,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _participantSubtitle(participant, activeSpeakerIds),
-                            style: TextStyle(
-                              color: AppColors.textSecondary(isDark),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (participant.hasRaisedHand)
-                      const Icon(
-                        Icons.pan_tool_alt_outlined,
-                        color: AppColors.warning,
-                        size: 18,
-                      ),
-                    if (_participantActions(details.access, participant, currentUserId).isNotEmpty)
-                      PopupMenuButton<String>(
-                        onSelected: (value) => _runRoomAction(
-                          action: value,
-                          targetUserId: participant.id,
-                          successMessage: _participantActionMessage(value),
                         ),
-                        itemBuilder: (context) => _participantActions(
-                          details.access,
-                          participant,
-                          currentUserId,
-                        )
-                            .map(
-                              (item) => PopupMenuItem<String>(
-                                value: item.$1,
-                                child: Text(item.$2),
-                              ),
-                            )
-                            .toList(),
+                        child: _avatar(isDark, participant.avatarUrl),
                       ),
-                  ],
-                ),
+                    ],
+                  );
+                },
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemCount: details.participants.length > 10
+                    ? 10
+                    : details.participants.length,
               ),
-            )
-            .toList(),
+            ),
+            const SizedBox(height: 14),
+          ],
+          ...details.participants.map(
+            (participant) => Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.subtleFill(isDark),
+                borderRadius: BorderRadius.circular(18),
+                border: activeSpeakerIds.contains(participant.id)
+                    ? Border.all(color: highlight.withAlpha(200), width: 2)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  _avatar(isDark, participant.avatarUrl),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                participant.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(isDark),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            if (participant.id == currentUserId) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                '(أنت)',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary(isDark),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _participantSubtitle(participant, activeSpeakerIds),
+                          style: TextStyle(
+                            color: AppColors.textSecondary(isDark),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (participant.hasRaisedHand)
+                    const Icon(
+                      Icons.pan_tool_alt_outlined,
+                      color: AppColors.warning,
+                      size: 18,
+                    ),
+                  if (_participantActions(
+                          details.access, participant, currentUserId)
+                      .isNotEmpty)
+                    PopupMenuButton<String>(
+                      onSelected: (value) => _runRoomAction(
+                        action: value,
+                        targetUserId: participant.id,
+                        successMessage: _participantActionMessage(value),
+                      ),
+                      itemBuilder: (context) => _participantActions(
+                        details.access,
+                        participant,
+                        currentUserId,
+                      )
+                          .map(
+                            (item) => PopupMenuItem<String>(
+                              value: item.$1,
+                              child: Text(item.$2),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -847,7 +972,8 @@ class _AudioRoomDetailScreenState
       actions.add(('promote_speaker', 'ترقية إلى متحدث'));
     }
     if (access.canPromoteSpeaker &&
-        const {'speaker', 'moderator', 'co_host'}.contains(participant.roomRole)) {
+        const {'speaker', 'moderator', 'co_host'}
+            .contains(participant.roomRole)) {
       actions.add(('demote_listener', 'إعادة إلى المستمعين'));
     }
     if (access.canPromoteModerator && participant.roomRole != 'moderator') {
@@ -917,6 +1043,112 @@ class _AudioRoomDetailScreenState
           color: Colors.white,
           fontWeight: FontWeight.w700,
         ),
+      ),
+    );
+  }
+
+  Widget _statusDot(Color color) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: color.withAlpha(120),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroAvatar(String? avatarUrl, {bool isActive = false}) {
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isActive ? Colors.white : Colors.white.withAlpha(90),
+          width: isActive ? 2.5 : 1.5,
+        ),
+      ),
+      child: CircleAvatar(
+        radius: 18,
+        backgroundColor: Colors.white.withAlpha(28),
+        backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+        child: avatarUrl == null
+            ? const Icon(Icons.person_outline, color: Colors.white)
+            : null,
+      ),
+    );
+  }
+
+  Widget _heroAvatarStack(
+    List<SessionParticipantModel> participants,
+    Set<String> activeSpeakerIds,
+    Color accent,
+  ) {
+    if (participants.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    const overlap = 18.0;
+    final max = participants.length > 6 ? 6 : participants.length;
+    final width = 40 + (max - 1) * overlap;
+
+    return SizedBox(
+      height: 40,
+      width: width,
+      child: Stack(
+        children: [
+          for (var i = 0; i < max; i++)
+            Positioned(
+              right: i * overlap,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withAlpha(12),
+                  border: Border.all(
+                    color: activeSpeakerIds.contains(participants[i].id)
+                        ? accent
+                        : Colors.white.withAlpha(110),
+                    width: 2,
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Colors.white.withAlpha(28),
+                  backgroundImage: participants[i].avatarUrl != null
+                      ? NetworkImage(participants[i].avatarUrl!)
+                      : null,
+                  child: participants[i].avatarUrl == null
+                      ? const Icon(Icons.person_outline,
+                          color: Colors.white, size: 18)
+                      : null,
+                ),
+              ),
+            ),
+          if (participants.length > max)
+            Positioned(
+              right: max * overlap,
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.white.withAlpha(28),
+                child: Text(
+                  '+${participants.length - max}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
