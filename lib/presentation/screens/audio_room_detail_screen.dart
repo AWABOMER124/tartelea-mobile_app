@@ -30,6 +30,9 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
   SessionDetailsModel? _details;
   bool _loading = true;
   bool _joiningLive = false;
+  bool _refreshingToken = false;
+  bool _tokenCanPublish = false;
+  bool _everConnectedToLivekit = false;
   String? _errorMessage;
   String? _livekitError;
   Timer? _pollTimer;
@@ -104,6 +107,8 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
   }
 
   Future<void> _loadDetails({bool silent = false}) async {
+    final previousAccess = _details?.access;
+
     if (!silent) {
       setState(() {
         _loading = true;
@@ -125,6 +130,8 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
         _errorMessage = null;
       });
 
+      await _maybeSyncLivekitToken(previousAccess, details);
+
       if (!details.session.isLive && _room != null) {
         await _disconnectRoom();
       }
@@ -140,6 +147,50 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
         setState(() {
           _loading = false;
         });
+      }
+    }
+  }
+
+  Future<void> _maybeSyncLivekitToken(
+    SessionAccessModel? previousAccess,
+    SessionDetailsModel details,
+  ) async {
+    final room = _room;
+    if (room == null) {
+      return;
+    }
+
+    if (!details.session.isLive) {
+      return;
+    }
+
+    if (room.connectionState != lk.ConnectionState.connected) {
+      return;
+    }
+
+    if (_refreshingToken || _joiningLive) {
+      return;
+    }
+
+    final backendCanPublish = details.access.canPublish;
+    final tokenCanPublish = _tokenCanPublish;
+
+    if (backendCanPublish && !tokenCanPublish) {
+      // The user has been promoted, but their current token still encodes listener permissions.
+      final justPromoted = previousAccess == null || !previousAccess.canPublish;
+      if (justPromoted) {
+        _showSnack('تمت ترقيتك إلى متحدث، جارٍ إعادة الاتصال…');
+        await _refreshLivekitTokenAndReconnect();
+      }
+      return;
+    }
+
+    if (!backendCanPublish && tokenCanPublish) {
+      // If a user was demoted, we must refresh to revoke publishing rights.
+      final justDemoted = previousAccess == null || previousAccess.canPublish;
+      if (justDemoted) {
+        _showSnack('تم تغيير دورك إلى مستمع، جارٍ تحديث الاتصال…');
+        await _refreshLivekitTokenAndReconnect();
       }
     }
   }
@@ -167,46 +218,10 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
 
       await _loadDetails(silent: true);
 
-      if (tokenResult.token.isEmpty) {
-        throw Exception('لم يصل رمز LiveKit لهذه الجلسة.');
-      }
-
-      if (tokenResult.url.isEmpty) {
-        throw Exception('لم يصل رابط LiveKit لهذه الجلسة.');
-      }
-
-      await _disconnectRoom();
-
-      final room = lk.Room(
-        roomOptions: const lk.RoomOptions(adaptiveStream: true, dynacast: true),
+      await _connectLivekitRoom(
+        tokenResult,
+        enableMicrophone: tokenResult.canPublish,
       );
-
-      void listener() {
-        if (mounted) {
-          setState(() {});
-        }
-      }
-
-      room.addListener(listener);
-      _roomListener = listener;
-
-      await room.connect(tokenResult.url, tokenResult.token);
-      await room.startAudio();
-      await room.setSpeakerOn(true);
-
-      if (tokenResult.canPublish) {
-        await room.localParticipant?.setMicrophoneEnabled(true);
-      }
-
-      if (!mounted) {
-        await room.disconnect();
-        await room.dispose();
-        return;
-      }
-
-      setState(() {
-        _room = room;
-      });
 
       _showSnack('تم تجهيز دخولك إلى البث.');
     } catch (error) {
@@ -224,6 +239,98 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
         });
       }
     }
+  }
+
+  Future<void> _refreshLivekitTokenAndReconnect({
+    bool enableMicrophoneAfter = false,
+  }) async {
+    final user = ref.read(userProvider);
+    if (user == null) {
+      context.go('/auth');
+      return;
+    }
+
+    if (_refreshingToken || _joiningLive) {
+      return;
+    }
+
+    setState(() {
+      _refreshingToken = true;
+      _livekitError = null;
+    });
+
+    try {
+      final tokenResult = await ref
+          .read(sessionRepositoryProvider)
+          .getLivekitToken(widget.roomId);
+
+      await _connectLivekitRoom(
+        tokenResult,
+        enableMicrophone: enableMicrophoneAfter,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _livekitError = error.toString().replaceFirst('Exception: ', '');
+      });
+      _showSnack(_livekitError!, isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _refreshingToken = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _connectLivekitRoom(
+    LivekitTokenModel tokenResult, {
+    required bool enableMicrophone,
+  }) async {
+    if (tokenResult.token.isEmpty) {
+      throw Exception('لم يصل رمز LiveKit لهذه الجلسة.');
+    }
+
+    if (tokenResult.url.isEmpty) {
+      throw Exception('لم يصل رابط LiveKit لهذه الجلسة.');
+    }
+
+    await _disconnectRoom();
+
+    final room = lk.Room(
+      roomOptions: const lk.RoomOptions(adaptiveStream: true, dynacast: true),
+    );
+
+    void listener() {
+      if (mounted) {
+        setState(() {});
+      }
+    }
+
+    room.addListener(listener);
+    _roomListener = listener;
+
+    await room.connect(tokenResult.url, tokenResult.token);
+    await room.startAudio();
+    await room.setSpeakerOn(true);
+
+    if (tokenResult.canPublish && enableMicrophone) {
+      await room.localParticipant?.setMicrophoneEnabled(true);
+    }
+
+    if (!mounted) {
+      await room.disconnect();
+      await room.dispose();
+      return;
+    }
+
+    setState(() {
+      _room = room;
+      _tokenCanPublish = tokenResult.canPublish;
+      _everConnectedToLivekit = true;
+    });
   }
 
   Future<void> _disconnectRoom() async {
@@ -323,6 +430,17 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
   Future<void> _toggleMicrophone() async {
     final room = _room;
     if (room == null) {
+      return;
+    }
+
+    if (_refreshingToken) {
+      return;
+    }
+
+    // Avoid attempting to publish with a listener-grade token.
+    final details = _details;
+    if (details != null && details.access.canPublish && !_tokenCanPublish) {
+      await _refreshLivekitTokenAndReconnect(enableMicrophoneAfter: true);
       return;
     }
 
@@ -582,6 +700,13 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     final micEnabled = _room?.localParticipant != null
         ? !(_room!.localParticipant!.isMuted)
         : false;
+    final tokenCanPublish = _tokenCanPublish;
+    final publishMismatch =
+        details.session.isLive && details.access.canPublish && !tokenCanPublish;
+    final revokeMismatch =
+        details.session.isLive && !details.access.canPublish && tokenCanPublish;
+    final showTokenNotice = _refreshingToken ||
+        (_everConnectedToLivekit && (publishMismatch || revokeMismatch));
     final currentUserId = ref.read(userProvider)?.id ?? '';
     final currentParticipant = details.participants
         .where((item) => item.id == currentUserId)
@@ -604,9 +729,13 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     } else if (details.session.isLive) {
       primaryLabel = isConnected
           ? 'أنت داخل الغرفة'
-          : (_joiningLive ? 'جارٍ تجهيز الدخول' : 'انضم للبث');
+          : (_joiningLive
+              ? 'جارٍ تجهيز الدخول'
+              : (_refreshingToken ? 'جارٍ تحديث الصلاحيات' : 'انضم للبث'));
       primaryIcon = Icons.headphones_outlined;
-      primaryAction = _joiningLive || isConnected ? null : _joinLiveRoom;
+      primaryAction = _joiningLive || _refreshingToken || isConnected
+          ? null
+          : _joinLiveRoom;
       primaryOutlined = false;
       primaryColor = const Color(0xFFFF3B30);
 
@@ -626,14 +755,29 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
       }
 
       if (isConnected && details.access.canPublish) {
-        secondaryButtons.add(
-          _actionButton(
-            micEnabled ? 'كتم الميكروفون' : 'فتح الميكروفون',
-            micEnabled ? Icons.mic_off_outlined : Icons.mic_none_outlined,
-            _toggleMicrophone,
-            outlined: true,
-          ),
-        );
+        if (tokenCanPublish) {
+          secondaryButtons.add(
+            _actionButton(
+              micEnabled ? 'كتم الميكروفون' : 'فتح الميكروفون',
+              micEnabled ? Icons.mic_off_outlined : Icons.mic_none_outlined,
+              _toggleMicrophone,
+              outlined: true,
+            ),
+          );
+        } else {
+          secondaryButtons.add(
+            _actionButton(
+              _refreshingToken ? 'جارٍ التحديث…' : 'تفعيل الميكروفون',
+              Icons.autorenew_rounded,
+              _refreshingToken
+                  ? null
+                  : () => _refreshLivekitTokenAndReconnect(
+                        enableMicrophoneAfter: true,
+                      ),
+              outlined: true,
+            ),
+          );
+        }
       }
 
       if (details.access.isRegistered && !details.access.canSpeak) {
@@ -681,6 +825,50 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (showTokenNotice) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.subtleFill(isDark),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.autorenew_rounded,
+                    color: AppColors.appBarForeground(isDark),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      publishMismatch
+                          ? 'تمت ترقيتك داخل الجلسة. جارٍ تحديث صلاحيات البث…'
+                          : (revokeMismatch
+                              ? 'تم تغيير دورك. جارٍ تحديث الاتصال…'
+                              : 'جارٍ تحديث الاتصال…'),
+                      style: TextStyle(
+                        color: AppColors.textPrimary(isDark),
+                        fontWeight: FontWeight.w700,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  if (!_refreshingToken)
+                    TextButton(
+                      onPressed: _refreshLivekitTokenAndReconnect,
+                      child: const Text('إعادة المحاولة'),
+                    )
+                  else
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           SizedBox(
             height: 52,
             child: primaryOutlined
