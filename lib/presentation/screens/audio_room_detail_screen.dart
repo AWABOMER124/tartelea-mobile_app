@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:developer' as dev;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,17 +29,35 @@ class AudioRoomDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
+  static const bool _traceLivekit =
+      bool.fromEnvironment('TRACE_LIVEKIT', defaultValue: false);
+  static const Duration _autoTokenRefreshCooldown = Duration(seconds: 12);
+
   SessionDetailsModel? _details;
   bool _loading = true;
   bool _joiningLive = false;
   bool _refreshingToken = false;
   bool _tokenCanPublish = false;
   bool _everConnectedToLivekit = false;
+  DateTime? _lastAutoTokenRefreshAt;
   String? _errorMessage;
   String? _livekitError;
   Timer? _pollTimer;
   lk.Room? _room;
   VoidCallback? _roomListener;
+
+  void _trace(String message, {Map<String, Object?> data = const {}}) {
+    if (!_traceLivekit) {
+      return;
+    }
+
+    final payload = <String, Object?>{
+      'sessionId': widget.roomId,
+      ...data,
+    };
+
+    dev.log('$message ${jsonEncode(payload)}', name: 'tartelea.livekit');
+  }
 
   @override
   void initState() {
@@ -175,24 +195,53 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     final backendCanPublish = details.access.canPublish;
     final tokenCanPublish = _tokenCanPublish;
 
-    if (backendCanPublish && !tokenCanPublish) {
-      // The user has been promoted, but their current token still encodes listener permissions.
-      final justPromoted = previousAccess == null || !previousAccess.canPublish;
-      if (justPromoted) {
-        _showSnack('تمت ترقيتك إلى متحدث، جارٍ إعادة الاتصال…');
-        await _refreshLivekitTokenAndReconnect();
-      }
+    if (backendCanPublish == tokenCanPublish) {
       return;
     }
 
-    if (!backendCanPublish && tokenCanPublish) {
-      // If a user was demoted, we must refresh to revoke publishing rights.
-      final justDemoted = previousAccess == null || previousAccess.canPublish;
-      if (justDemoted) {
-        _showSnack('تم تغيير دورك إلى مستمع، جارٍ تحديث الاتصال…');
-        await _refreshLivekitTokenAndReconnect();
-      }
+    final now = DateTime.now();
+    final lastAttempt = _lastAutoTokenRefreshAt;
+    if (lastAttempt != null &&
+        now.difference(lastAttempt) < _autoTokenRefreshCooldown) {
+      _trace(
+        'token_refresh_skipped_cooldown',
+        data: {
+          'userId': ref.read(userProvider)?.id,
+          'backendRole': details.access.roomRole,
+          'backendCanPublish': backendCanPublish,
+          'tokenCanPublish': tokenCanPublish,
+          'livekitIdentity': room.localParticipant?.identity,
+          'connectionState': room.connectionState.toString(),
+        },
+      );
+      return;
     }
+
+    _lastAutoTokenRefreshAt = now;
+
+    final accessChanged = previousAccess == null ||
+        previousAccess.canPublish != backendCanPublish;
+    if (accessChanged) {
+      _showSnack(
+        backendCanPublish
+            ? 'تمت ترقيتك إلى متحدث، جارٍ إعادة الاتصال…'
+            : 'تم تغيير دورك إلى مستمع، جارٍ تحديث الاتصال…',
+      );
+    }
+
+    _trace(
+      'token_refresh_auto_triggered',
+      data: {
+        'userId': ref.read(userProvider)?.id,
+        'backendRole': details.access.roomRole,
+        'backendCanPublish': backendCanPublish,
+        'tokenCanPublish': tokenCanPublish,
+        'livekitIdentity': room.localParticipant?.identity,
+        'connectionState': room.connectionState.toString(),
+      },
+    );
+
+    await _refreshLivekitTokenAndReconnect(reason: 'role_mismatch_auto');
   }
 
   Future<void> _joinLiveRoom() async {
@@ -212,9 +261,26 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     });
 
     try {
+      _trace(
+        'join_live_request_token',
+        data: {
+          'userId': user.id,
+          'livekitIdentityBefore': _room?.localParticipant?.identity,
+        },
+      );
+
       final tokenResult = await ref
           .read(sessionRepositoryProvider)
           .getLivekitToken(widget.roomId);
+
+      _trace(
+        'join_live_token_response',
+        data: {
+          'userId': user.id,
+          'responseRole': tokenResult.role,
+          'responseCanPublish': tokenResult.canPublish,
+        },
+      );
 
       await _loadDetails(silent: true);
 
@@ -243,6 +309,7 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
 
   Future<void> _refreshLivekitTokenAndReconnect({
     bool enableMicrophoneAfter = false,
+    String reason = 'manual',
   }) async {
     final user = ref.read(userProvider);
     if (user == null) {
@@ -259,10 +326,31 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
       _livekitError = null;
     });
 
+    _trace(
+      'token_refresh_start',
+      data: {
+        'userId': user.id,
+        'reason': reason,
+        'enableMicrophoneAfter': enableMicrophoneAfter,
+        'tokenCanPublishBefore': _tokenCanPublish,
+        'livekitIdentityBefore': _room?.localParticipant?.identity,
+      },
+    );
+
     try {
       final tokenResult = await ref
           .read(sessionRepositoryProvider)
           .getLivekitToken(widget.roomId);
+
+      _trace(
+        'token_refresh_response',
+        data: {
+          'userId': user.id,
+          'reason': reason,
+          'responseRole': tokenResult.role,
+          'responseCanPublish': tokenResult.canPublish,
+        },
+      );
 
       await _connectLivekitRoom(
         tokenResult,
@@ -272,6 +360,14 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
       if (!mounted) {
         return;
       }
+      _trace(
+        'token_refresh_failed',
+        data: {
+          'userId': user.id,
+          'reason': reason,
+          'error': error.toString(),
+        },
+      );
       setState(() {
         _livekitError = error.toString().replaceFirst('Exception: ', '');
       });
@@ -320,6 +416,9 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
       await room.localParticipant?.setMicrophoneEnabled(true);
     }
 
+    final localIdentity = room.localParticipant?.identity;
+    final livekitCanPublish = room.localParticipant?.permissions.canPublish;
+
     if (!mounted) {
       await room.disconnect();
       await room.dispose();
@@ -331,6 +430,17 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
       _tokenCanPublish = tokenResult.canPublish;
       _everConnectedToLivekit = true;
     });
+
+    _trace(
+      'livekit_connected',
+      data: {
+        'userId': ref.read(userProvider)?.id,
+        'livekitIdentity': localIdentity,
+        'tokenCanPublish': tokenResult.canPublish,
+        'livekitCanPublish': livekitCanPublish,
+        'enableMicrophone': enableMicrophone,
+      },
+    );
   }
 
   Future<void> _disconnectRoom() async {
@@ -399,6 +509,15 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     bool disconnectAfter = false,
   }) async {
     try {
+      _trace(
+        'session_action_request',
+        data: {
+          'userId': ref.read(userProvider)?.id,
+          'action': action,
+          'targetUserId': targetUserId,
+        },
+      );
+
       final details = await ref.read(sessionRepositoryProvider).applyAction(
             sessionId: widget.roomId,
             action: action,
@@ -412,6 +531,17 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
       setState(() {
         _details = details;
       });
+
+      _trace(
+        'session_action_response',
+        data: {
+          'userId': ref.read(userProvider)?.id,
+          'action': action,
+          'targetUserId': targetUserId,
+          'backendRole': details.access.roomRole,
+          'backendCanPublish': details.access.canPublish,
+        },
+      );
 
       if (disconnectAfter) {
         await _disconnectRoom();
@@ -440,7 +570,20 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     // Avoid attempting to publish with a listener-grade token.
     final details = _details;
     if (details != null && details.access.canPublish && !_tokenCanPublish) {
-      await _refreshLivekitTokenAndReconnect(enableMicrophoneAfter: true);
+      _trace(
+        'mic_requested_token_listener',
+        data: {
+          'userId': ref.read(userProvider)?.id,
+          'backendRole': details.access.roomRole,
+          'backendCanPublish': details.access.canPublish,
+          'tokenCanPublish': _tokenCanPublish,
+          'livekitIdentity': room.localParticipant?.identity,
+        },
+      );
+      await _refreshLivekitTokenAndReconnect(
+        enableMicrophoneAfter: true,
+        reason: 'mic_request',
+      );
       return;
     }
 
@@ -773,6 +916,7 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
                   ? null
                   : () => _refreshLivekitTokenAndReconnect(
                         enableMicrophoneAfter: true,
+                        reason: 'manual_enable_mic',
                       ),
               outlined: true,
             ),
@@ -855,7 +999,9 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
                   ),
                   if (!_refreshingToken)
                     TextButton(
-                      onPressed: _refreshLivekitTokenAndReconnect,
+                      onPressed: () => _refreshLivekitTokenAndReconnect(
+                        reason: 'manual_retry',
+                      ),
                       child: const Text('إعادة المحاولة'),
                     )
                   else
