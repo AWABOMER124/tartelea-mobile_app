@@ -1,0 +1,660 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/api/api_config.dart';
+import '../../core/theme/app_colors.dart';
+import '../../data/models/content_library_models.dart';
+import '../providers/content_provider.dart';
+import '../providers/theme_provider.dart';
+import 'content_webview_screen.dart';
+import 'library_track_screen.dart';
+import 'program_detail_screen.dart';
+
+class LibraryCategoryScreen extends ConsumerWidget {
+  final ContentCategoryModel category;
+
+  const LibraryCategoryScreen({
+    super.key,
+    required this.category,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = ref.watch(themeProvider) == ThemeMode.dark;
+    final tracksAsync = ref.watch(contentTracksProvider(category.slug));
+    final programsAsync = ref.watch(
+      programsProvider(ProgramsQuery(categorySlug: category.slug)),
+    );
+    final itemsAsync = ref.watch(
+      libraryItemsProvider(LibraryItemsQuery(categorySlug: category.slug)),
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(category.title),
+      ),
+      body: Container(
+        decoration: BoxDecoration(gradient: AppColors.screenGradient(isDark)),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+          children: [
+            if (category.description?.trim().isNotEmpty == true)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  category.description!,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.7,
+                    color: AppColors.textSecondary(isDark),
+                  ),
+                ),
+              ),
+            tracksAsync.when(
+              data: (tracks) {
+                if (tracks.isEmpty) return const SizedBox.shrink();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'المسارات',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary(isDark),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: tracks.length,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 1.18,
+                      ),
+                      itemBuilder: (context, index) {
+                        final track = tracks[index];
+                        return _TrackCard(
+                          track: track,
+                          isDark: isDark,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => LibraryTrackScreen(
+                                  category: category,
+                                  track: track,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                );
+              },
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+            _SectionHeader(title: 'البرامج', isDark: isDark),
+            programsAsync.when(
+              data: (programs) {
+                if (programs.isEmpty) {
+                  return _InlineEmptyState(
+                    isDark: isDark,
+                    text: 'لا توجد برامج حالياً',
+                  );
+                }
+
+                return Column(
+                  children: [
+                    for (final program in programs)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _ProgramCard(
+                          program: program,
+                          isDark: isDark,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ProgramDetailScreen(program: program),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                );
+              },
+              loading: () => _InlineLoading(isDark: isDark),
+              error: (err, _) => _InlineError(isDark: isDark, text: err.toString()),
+            ),
+            const SizedBox(height: 18),
+            _SectionHeader(title: 'المواد', isDark: isDark),
+            itemsAsync.when(
+              data: (items) {
+                if (items.isEmpty) {
+                  return _InlineEmptyState(
+                    isDark: isDark,
+                    text: 'لا توجد مواد حالياً',
+                  );
+                }
+
+                return Column(
+                  children: [
+                    for (final item in items.take(20))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _LibraryItemCard(
+                          item: item,
+                          isDark: isDark,
+                          onTap: () {
+                            if (item.isLocked) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('هذا المحتوى مقفل ويتطلب صلاحية مناسبة.'),
+                                ),
+                              );
+                              return;
+                            }
+
+                            final url = (item.fileUrl?.isNotEmpty == true)
+                                ? item.fileUrl!
+                                : (item.mediaUrl?.isNotEmpty == true)
+                                    ? item.mediaUrl!
+                                    : '';
+
+                            if (url.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('لا يوجد رابط متاح لهذا المحتوى حالياً.'),
+                                ),
+                              );
+                              return;
+                            }
+
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ContentWebViewScreen(
+                                  title: item.title,
+                                  url: url,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                );
+              },
+              loading: () => _InlineLoading(isDark: isDark),
+              error: (err, _) => _InlineError(isDark: isDark, text: err.toString()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrackCard extends StatelessWidget {
+  final ContentTrackModel track;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _TrackCard({
+    required this.track,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor(isDark),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: AppColors.borderColor(isDark)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(isDark ? 55 : 18),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isDark
+                        ? const [AppColors.darkPrimary, AppColors.darkAccent]
+                        : const [AppColors.accent, AppColors.spiritualGreenLight],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.route_rounded, color: Colors.white),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                track.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary(isDark),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                track.description?.trim().isNotEmpty == true
+                    ? track.description!
+                    : 'برامج ومصادر داخل هذا المسار',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.5,
+                  color: AppColors.textSecondary(isDark),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProgramCard extends StatelessWidget {
+  final ProgramModel program;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _ProgramCard({
+    required this.program,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = ApiConfig.resolveApiUrl(program.thumbnailPath);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(26),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor(isDark),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: AppColors.borderColor(isDark)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 92,
+                height: 92,
+                margin: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: AppColors.subtleFill(isDark),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: imageUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) =>
+                            Container(color: AppColors.subtleFill(isDark)),
+                        errorWidget: (_, __, ___) =>
+                            Container(color: AppColors.subtleFill(isDark)),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              program.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.textPrimary(isDark),
+                              ),
+                            ),
+                          ),
+                          if (program.isLocked)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.warning.withAlpha(35),
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: AppColors.warning.withAlpha(80),
+                                ),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(
+                                    Icons.lock_rounded,
+                                    size: 14,
+                                    color: AppColors.warning,
+                                  ),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'مقفل',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.warning,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        program.description?.trim().isNotEmpty == true
+                            ? program.description!
+                            : 'دروس ومواد داخل هذا البرنامج',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.55,
+                          color: AppColors.textSecondary(isDark),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Icon(
+                  Icons.chevron_left_rounded,
+                  color: AppColors.textSecondary(isDark),
+                  size: 28,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LibraryItemCard extends StatelessWidget {
+  final LibraryItemModel item;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _LibraryItemCard({
+    required this.item,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = ApiConfig.resolveApiUrl(item.thumbnailPath);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(26),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor(isDark),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: AppColors.borderColor(isDark)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 68,
+                height: 68,
+                margin: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  color: AppColors.subtleFill(isDark),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: imageUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) =>
+                            Container(color: AppColors.subtleFill(isDark)),
+                        errorWidget: (_, __, ___) =>
+                            Container(color: AppColors.subtleFill(isDark)),
+                      )
+                    : Icon(
+                        _iconForType(item.contentType),
+                        color: AppColors.textSecondary(isDark),
+                      ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.textPrimary(isDark),
+                              ),
+                            ),
+                          ),
+                          if (item.isLocked)
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.warning.withAlpha(35),
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: AppColors.warning.withAlpha(80),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.lock_rounded,
+                                size: 14,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        item.description?.trim().isNotEmpty == true
+                            ? item.description!
+                            : 'محتوى ${_labelForType(item.contentType)}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.55,
+                          color: AppColors.textSecondary(isDark),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Icon(
+                  Icons.chevron_left_rounded,
+                  color: AppColors.textSecondary(isDark),
+                  size: 28,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _iconForType(String type) {
+    switch (type) {
+      case 'video':
+        return Icons.play_circle_outline_rounded;
+      case 'audio':
+        return Icons.headset_rounded;
+      case 'exercise':
+        return Icons.fitness_center_rounded;
+      case 'meditation':
+        return Icons.self_improvement_rounded;
+      case 'file':
+        return Icons.description_outlined;
+      default:
+        return Icons.article_outlined;
+    }
+  }
+
+  String _labelForType(String type) {
+    switch (type) {
+      case 'video':
+        return 'مرئي';
+      case 'audio':
+        return 'صوتي';
+      case 'exercise':
+        return 'تمارين';
+      case 'meditation':
+        return 'تأمل';
+      case 'file':
+        return 'ملفات';
+      default:
+        return 'مقالات';
+    }
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final bool isDark;
+
+  const _SectionHeader({required this.title, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w900,
+          color: AppColors.textPrimary(isDark),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineLoading extends StatelessWidget {
+  final bool isDark;
+
+  const _InlineLoading({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 22),
+      child: Center(
+        child: CircularProgressIndicator(
+          color: isDark ? AppColors.darkPrimary : AppColors.primary,
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineEmptyState extends StatelessWidget {
+  final bool isDark;
+  final String text;
+
+  const _InlineEmptyState({required this.isDark, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: AppColors.panelColor(isDark),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.borderColor(isDark)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(color: AppColors.textSecondary(isDark)),
+      ),
+    );
+  }
+}
+
+class _InlineError extends StatelessWidget {
+  final bool isDark;
+  final String text;
+
+  const _InlineError({required this.isDark, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: AppColors.error.withAlpha(18),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.error.withAlpha(60)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(color: AppColors.textPrimary(isDark)),
+      ),
+    );
+  }
+}

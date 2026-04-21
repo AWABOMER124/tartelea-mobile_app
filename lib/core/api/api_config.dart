@@ -33,6 +33,22 @@ class ApiConfig {
   // Content endpoints
   static const String contents = '/contents';
   static const String contentDetail = '/contents/';
+  static const String contentCategories = '/contents/categories';
+  static const String contentTracks = '/contents/tracks';
+  static const String libraryItems = '/contents/library-items';
+  static const String programs = '/contents/programs';
+  static const String featuredContent = '/contents/featured';
+
+  static String programLessons(String programId) => '/contents/programs/$programId/lessons';
+
+  static String resolveApiUrl(String? path) {
+    if (path == null || path.isEmpty) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+
+    final normalizedBase = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+    final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
+    return '$normalizedBase$normalizedPath';
+  }
 
   // User & Social endpoints
   static const String profiles = '/profiles/';
