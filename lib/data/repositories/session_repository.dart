@@ -82,6 +82,15 @@ class SessionRepository {
     }
   }
 
+  Future<LivekitTokenModel> getLivekitToken(String sessionId) async {
+    try {
+      final response = await _api.post('${ApiConfig.sessions}/$sessionId/token');
+      return LivekitTokenModel.fromJson(_asMap(response.data));
+    } on DioException catch (error) {
+      throw Exception(_messageFromError(error, 'تعذر الحصول على رمز دخول البث.'));
+    }
+  }
+
   Future<SessionJoinResultModel> leaveSession(String sessionId) async {
     try {
       final response = await _api.post('${ApiConfig.sessions}/$sessionId/leave');

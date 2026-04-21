@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
-import '../../core/api/api_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/session_models.dart';
 import '../providers/auth_provider.dart';
@@ -163,17 +162,18 @@ class _AudioRoomDetailScreenState
     });
 
     try {
-      final joinResult =
-          await ref.read(sessionRepositoryProvider).joinSession(widget.roomId);
+      final tokenResult = await ref
+          .read(sessionRepositoryProvider)
+          .getLivekitToken(widget.roomId);
 
       await _loadDetails(silent: true);
 
-      if (joinResult.token == null || joinResult.token!.isEmpty) {
-        throw Exception(
-          joinResult.session.isLive
-              ? 'لم يصل رمز LiveKit لهذه الجلسة.'
-              : 'تم تسجيلك في الجلسة، وسيظهر الدخول عند بدء البث.',
-        );
+      if (tokenResult.token.isEmpty) {
+        throw Exception('لم يصل رمز LiveKit لهذه الجلسة.');
+      }
+
+      if (tokenResult.url.isEmpty) {
+        throw Exception('لم يصل رابط LiveKit لهذه الجلسة.');
       }
 
       await _disconnectRoom();
@@ -190,11 +190,11 @@ class _AudioRoomDetailScreenState
       room.addListener(listener);
       _roomListener = listener;
 
-      await room.connect(ApiConfig.livekitBaseUrl, joinResult.token!);
+      await room.connect(tokenResult.url, tokenResult.token);
       await room.startAudio();
       await room.setSpeakerOn(true);
 
-      if (joinResult.access.canPublish) {
+      if (tokenResult.canPublish) {
         await room.localParticipant?.setMicrophoneEnabled(true);
       }
 

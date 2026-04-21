@@ -333,6 +333,29 @@ class SessionJoinResultModel {
   }
 }
 
+class LivekitTokenModel {
+  final String token;
+  final String url;
+  final bool canPublish;
+  final String role;
+
+  const LivekitTokenModel({
+    required this.token,
+    required this.url,
+    required this.canPublish,
+    required this.role,
+  });
+
+  factory LivekitTokenModel.fromJson(Map<String, dynamic> json) {
+    return LivekitTokenModel(
+      token: _asString(json['token']),
+      url: _asString(json['url']),
+      canPublish: _asBool(json['canPublish']),
+      role: _asString(json['role'], fallback: 'listener'),
+    );
+  }
+}
+
 Map<String, dynamic> _asMap(dynamic value) {
   if (value is Map<String, dynamic>) {
     return value;
