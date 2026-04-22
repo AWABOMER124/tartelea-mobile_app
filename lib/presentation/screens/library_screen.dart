@@ -1,22 +1,36 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/api/api_config.dart';
+import '../../core/constants/app_radius.dart';
+import '../../core/constants/app_spacing.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/content_library_models.dart';
 import '../providers/content_provider.dart';
 import '../providers/theme_provider.dart';
-import 'content_webview_screen.dart';
+import '../widgets/app_skeleton.dart';
+import '../widgets/app_states.dart';
+import '../widgets/app_section_header.dart';
+import '../widgets/featured_content_section.dart';
+import '../widgets/common_app_bar.dart';
 import 'library_category_screen.dart';
 
-class LibraryScreen extends ConsumerWidget {
+class LibraryScreen extends ConsumerStatefulWidget {
   final String? initialSidebarCategory;
 
-  const LibraryScreen({super.key, this.initialSidebarCategory});
+  const LibraryScreen({
+    super.key,
+    this.initialSidebarCategory,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+  bool _handledInitialCategory = false;
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = ref.watch(themeProvider) == ThemeMode.dark;
     final categoriesAsync = ref.watch(contentCategoriesProvider);
     final featuredAsync = ref.watch(contentFeaturedProvider);
@@ -31,109 +45,124 @@ class LibraryScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('المكتبة'),
-      ),
+      appBar: const CommonAppBar(title: 'المكتبة'),
       body: Container(
         decoration: BoxDecoration(gradient: AppColors.screenGradient(isDark)),
         child: RefreshIndicator(
           onRefresh: onRefresh,
           color: isDark ? AppColors.darkPrimary : AppColors.primary,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+            padding: AppSpacing.page,
             children: [
-              _HeroCard(isDark: isDark),
-              const SizedBox(height: 14),
+              const _LibraryHero(),
+              const SizedBox(height: AppSpacing.s16),
               featuredAsync.when(
                 data: (featured) => featured == null
                     ? const SizedBox.shrink()
-                    : _FeaturedSection(
-                        featured: featured,
-                        isDark: isDark,
-                      ),
-                loading: () => _LoadingPanel(isDark: isDark, height: 164),
+                    : FeaturedContentSection(featured: featured),
+                loading: () => const AppSkeletonCard(height: 190),
                 error: (_, __) => const SizedBox.shrink(),
               ),
-              const SizedBox(height: 14),
-              Text(
-                'الأقسام',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.textPrimary(isDark),
-                ),
-              ),
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpacing.s20),
+              const AppSectionHeader(title: 'الأقسام'),
+              const SizedBox(height: AppSpacing.s12),
               categoriesAsync.when(
                 data: (categories) {
+                  _maybeOpenInitialCategory(context, categories);
+
                   if (categories.isEmpty) {
-                    return _EmptyState(
-                      isDark: isDark,
+                    return AppEmptyState(
+                      icon: Icons.menu_book_outlined,
                       title: 'لا يوجد محتوى بعد',
-                      subtitle: 'سيظهر هنا تقسيم المحتوى بمجرد إعداد Directus.',
+                      message: 'سيظهر هنا تقسيم المحتوى بمجرد إعداد Directus.',
+                      actionLabel: 'تحديث',
+                      onAction: onRefresh,
                     );
                   }
 
-                  return Column(
-                    children: [
-                      for (var i = 0; i < categories.length; i++)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _CategoryCard(
-                            category: categories[i],
-                            isDark: isDark,
-                            index: i,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => LibraryCategoryScreen(
-                                    category: categories[i],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                    ],
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: categories.length,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: AppSpacing.s12,
+                      crossAxisSpacing: AppSpacing.s12,
+                      childAspectRatio: 0.92,
+                    ),
+                    itemBuilder: (context, index) {
+                      final category = categories[index];
+                      return _CategoryTile(
+                        category: category,
+                        index: index,
+                        onTap: () => _openCategory(context, category),
+                      );
+                    },
                   );
                 },
-                loading: () => Column(
-                  children: [
-                    _LoadingPanel(isDark: isDark, height: 112),
-                    const SizedBox(height: 12),
-                    _LoadingPanel(isDark: isDark, height: 112),
-                  ],
-                ),
-                error: (err, _) => _EmptyState(
-                  isDark: isDark,
+                loading: () => const _CategoriesSkeleton(),
+                error: (err, _) => AppErrorState(
                   title: 'تعذر تحميل الأقسام',
-                  subtitle: err.toString(),
+                  message: err.toString(),
+                  onRetry: onRefresh,
                 ),
               ),
+              const SizedBox(height: AppSpacing.s24),
             ],
           ),
         ),
       ),
     );
   }
+
+  void _maybeOpenInitialCategory(
+    BuildContext context,
+    List<ContentCategoryModel> categories,
+  ) {
+    if (_handledInitialCategory) return;
+    final targetSlug = widget.initialSidebarCategory?.trim();
+    if (targetSlug == null || targetSlug.isEmpty) return;
+
+    final category = categories
+        .cast<ContentCategoryModel?>()
+        .firstWhere((c) => c?.slug == targetSlug, orElse: () => null);
+    if (category == null) {
+      _handledInitialCategory = true;
+      return;
+    }
+
+    _handledInitialCategory = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _openCategory(context, category);
+    });
+  }
+
+  void _openCategory(BuildContext context, ContentCategoryModel category) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LibraryCategoryScreen(category: category),
+      ),
+    );
+  }
 }
 
-class _HeroCard extends StatelessWidget {
-  final bool isDark;
-
-  const _HeroCard({required this.isDark});
+class _LibraryHero extends ConsumerWidget {
+  const _LibraryHero();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = ref.watch(themeProvider) == ThemeMode.dark;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
       decoration: BoxDecoration(
         gradient: AppColors.heroGradient(isDark),
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: AppRadius.panel,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(isDark ? 70 : 30),
+            color: Colors.black.withAlpha(isDark ? 70 : 26),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -144,307 +173,60 @@ class _HeroCard extends StatelessWidget {
         children: [
           Text(
             'المكتبة الترتيلية',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: Colors.white.withAlpha(240),
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'رحلة محتوى منظمة: مسارات، برامج، ومصادر تساعدك تتقدم خطوة بخطوة.',
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.6,
-              color: Colors.white.withAlpha(220),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeaturedSection extends StatelessWidget {
-  final ContentFeaturedResponse featured;
-  final bool isDark;
-
-  const _FeaturedSection({
-    required this.featured,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasBanners = featured.banners.isNotEmpty;
-    final hasPrograms = featured.featuredPrograms.isNotEmpty;
-    final hasItems = featured.featuredLibraryItems.isNotEmpty;
-
-    if (!hasBanners && !hasPrograms && !hasItems) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.panelColor(isDark),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: AppColors.borderColor(isDark)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'محتوى مميز',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-              color: AppColors.textPrimary(isDark),
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (hasBanners) _BannersCarousel(banners: featured.banners, isDark: isDark),
-          if (hasPrograms) ...[
-            const SizedBox(height: 12),
-            _HorizontalProgramsRow(programs: featured.featuredPrograms, isDark: isDark),
-          ],
-          if (hasItems) ...[
-            const SizedBox(height: 12),
-            _HorizontalItemsRow(items: featured.featuredLibraryItems, isDark: isDark),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _BannersCarousel extends StatefulWidget {
-  final List<FeaturedBannerModel> banners;
-  final bool isDark;
-
-  const _BannersCarousel({required this.banners, required this.isDark});
-
-  @override
-  State<_BannersCarousel> createState() => _BannersCarouselState();
-}
-
-class _BannersCarouselState extends State<_BannersCarousel> {
-  late final PageController _controller;
-  int _index = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = PageController(viewportFraction: 0.92);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 150,
-          child: PageView.builder(
-            controller: _controller,
-            itemCount: widget.banners.length,
-            onPageChanged: (value) => setState(() => _index = value),
-            itemBuilder: (context, index) {
-              final banner = widget.banners[index];
-              final imageUrl = ApiConfig.resolveApiUrl(banner.imagePath);
-
-              return GestureDetector(
-                onTap: banner.link == null || banner.link!.isEmpty
-                    ? null
-                    : () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ContentWebViewScreen(
-                              title: banner.title,
-                              url: banner.link!,
-                            ),
-                          ),
-                        );
-                      },
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 6),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.borderColor(widget.isDark)),
-                    color: AppColors.surfaceColor(widget.isDark),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (imageUrl.isNotEmpty)
-                        CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          fit: BoxFit.cover,
-                          fadeInDuration: const Duration(milliseconds: 180),
-                          placeholder: (_, __) => Container(
-                            color: AppColors.subtleFill(widget.isDark),
-                          ),
-                          errorWidget: (_, __, ___) => Container(
-                            color: AppColors.subtleFill(widget.isDark),
-                            alignment: Alignment.center,
-                            child: Icon(
-                              Icons.auto_awesome,
-                              color: AppColors.textSecondary(widget.isDark),
-                            ),
-                          ),
-                        )
-                      else
-                        Container(color: AppColors.subtleFill(widget.isDark)),
-                      Align(
-                        alignment: Alignment.bottomRight,
-                        child: Container(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.transparent,
-                                Colors.black.withAlpha(150),
-                              ],
-                            ),
-                          ),
-                          child: Text(
-                            banner.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: Colors.white.withAlpha(245),
                 ),
-              );
-            },
           ),
-        ),
-        if (widget.banners.length > 1) ...[
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (var i = 0; i < widget.banners.length; i++)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: i == _index ? 18 : 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: i == _index
-                        ? (widget.isDark ? AppColors.darkPrimary : AppColors.accent)
-                        : AppColors.borderColor(widget.isDark),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+          const SizedBox(height: AppSpacing.s8),
+          Text(
+            'محتوى منظم: مسارات، برامج، ومواد تساعدك تتقدم بهدوء ووضوح.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.white.withAlpha(230),
                 ),
-            ],
           ),
         ],
-      ],
+      ),
     );
   }
 }
 
-class _HorizontalProgramsRow extends StatelessWidget {
-  final List<ProgramModel> programs;
-  final bool isDark;
-
-  const _HorizontalProgramsRow({required this.programs, required this.isDark});
+class _CategoriesSkeleton extends StatelessWidget {
+  const _CategoriesSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'برامج مختارة',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary(isDark),
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 132,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: programs.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, index) {
-              return _ProgramMiniCard(program: programs[index], isDark: isDark);
-            },
-          ),
-        ),
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: AppSpacing.s12,
+      crossAxisSpacing: AppSpacing.s12,
+      childAspectRatio: 0.92,
+      children: const [
+        AppSkeletonCard(height: 170),
+        AppSkeletonCard(height: 170),
+        AppSkeletonCard(height: 170),
+        AppSkeletonCard(height: 170),
       ],
     );
   }
 }
 
-class _HorizontalItemsRow extends StatelessWidget {
-  final List<LibraryItemModel> items;
-  final bool isDark;
-
-  const _HorizontalItemsRow({required this.items, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'مواد مختارة',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary(isDark),
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 132,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, index) {
-              return _LibraryItemMiniCard(item: items[index], isDark: isDark);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CategoryCard extends StatelessWidget {
+class _CategoryTile extends ConsumerWidget {
   final ContentCategoryModel category;
-  final bool isDark;
   final int index;
   final VoidCallback onTap;
 
-  const _CategoryCard({
+  const _CategoryTile({
     required this.category,
-    required this.isDark,
     required this.index,
     required this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = ref.watch(themeProvider) == ThemeMode.dark;
+
     final gradient = index.isEven
         ? LinearGradient(
             begin: Alignment.topLeft,
@@ -465,64 +247,51 @@ class _CategoryCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: AppRadius.panel,
         child: Ink(
           decoration: BoxDecoration(
             gradient: gradient,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withAlpha(isDark ? 26 : 30)),
+            borderRadius: AppRadius.panel,
+            border: Border.all(
+              color: Colors.white.withAlpha(isDark ? 26 : 30),
+            ),
           ),
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-          child: Row(
+          padding: const EdgeInsets.all(AppSpacing.s16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 54,
-                height: 54,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: Colors.white.withAlpha(isDark ? 18 : 22),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(
                   index.isEven ? Icons.school_rounded : Icons.favorite_rounded,
                   color: Colors.white.withAlpha(240),
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      category.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white.withAlpha(245),
-                      ),
+              const Spacer(),
+              Text(
+                category.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Colors.white.withAlpha(245),
+                      fontWeight: FontWeight.w900,
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      category.description?.trim().isNotEmpty == true
-                          ? category.description!
-                          : 'استكشف المسارات والمحتوى الخاص بهذا القسم.',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.6,
-                        color: Colors.white.withAlpha(220),
-                      ),
-                    ),
-                  ],
-                ),
               ),
-              const SizedBox(width: 12),
-              Icon(
-                Icons.chevron_left_rounded,
-                color: Colors.white.withAlpha(240),
-                size: 28,
+              const SizedBox(height: AppSpacing.s8),
+              Text(
+                category.description?.trim().isNotEmpty == true
+                    ? category.description!
+                    : 'استكشف المسارات والمحتوى الخاص بهذا القسم.',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white.withAlpha(225),
+                    ),
               ),
             ],
           ),
@@ -531,244 +300,3 @@ class _CategoryCard extends StatelessWidget {
     );
   }
 }
-
-class _ProgramMiniCard extends StatelessWidget {
-  final ProgramModel program;
-  final bool isDark;
-
-  const _ProgramMiniCard({required this.program, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    final imageUrl = ApiConfig.resolveApiUrl(program.thumbnailPath);
-
-    return Container(
-      width: 210,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceColor(isDark),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.borderColor(isDark)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (imageUrl.isNotEmpty)
-            CachedNetworkImage(
-              imageUrl: imageUrl,
-              fit: BoxFit.cover,
-              placeholder: (_, __) => Container(color: AppColors.subtleFill(isDark)),
-              errorWidget: (_, __, ___) => Container(color: AppColors.subtleFill(isDark)),
-            )
-          else
-            Container(color: AppColors.subtleFill(isDark)),
-          Align(
-            alignment: Alignment.bottomRight,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withAlpha(160),
-                  ],
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      program.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  if (program.isLocked)
-                    Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withAlpha(160),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: Colors.white.withAlpha(60)),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.lock_rounded, size: 14, color: Colors.white),
-                          SizedBox(width: 6),
-                          Text(
-                            'مقفل',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LibraryItemMiniCard extends StatelessWidget {
-  final LibraryItemModel item;
-  final bool isDark;
-
-  const _LibraryItemMiniCard({required this.item, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    final imageUrl = ApiConfig.resolveApiUrl(item.thumbnailPath);
-
-    return Container(
-      width: 210,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceColor(isDark),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.borderColor(isDark)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (imageUrl.isNotEmpty)
-            CachedNetworkImage(
-              imageUrl: imageUrl,
-              fit: BoxFit.cover,
-              placeholder: (_, __) => Container(color: AppColors.subtleFill(isDark)),
-              errorWidget: (_, __, ___) => Container(color: AppColors.subtleFill(isDark)),
-            )
-          else
-            Container(color: AppColors.subtleFill(isDark)),
-          Align(
-            alignment: Alignment.bottomRight,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withAlpha(160),
-                  ],
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  if (item.isLocked)
-                    Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withAlpha(160),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: Colors.white.withAlpha(60)),
-                      ),
-                      child: const Icon(Icons.lock_rounded, size: 14, color: Colors.white),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LoadingPanel extends StatelessWidget {
-  final bool isDark;
-  final double height;
-
-  const _LoadingPanel({required this.isDark, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        color: AppColors.panelColor(isDark),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: AppColors.borderColor(isDark)),
-      ),
-      alignment: Alignment.center,
-      child: CircularProgressIndicator(
-        color: isDark ? AppColors.darkPrimary : AppColors.primary,
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final bool isDark;
-  final String title;
-  final String subtitle;
-
-  const _EmptyState({
-    required this.isDark,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-      decoration: BoxDecoration(
-        color: AppColors.panelColor(isDark),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: AppColors.borderColor(isDark)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-              color: AppColors.textPrimary(isDark),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.6,
-              color: AppColors.textSecondary(isDark),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-

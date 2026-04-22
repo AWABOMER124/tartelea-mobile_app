@@ -3,12 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/constants/app_spacing.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/session_models.dart';
 import '../providers/auth_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/app_skeleton.dart';
+import '../widgets/app_states.dart';
 import '../widgets/common_app_bar.dart';
+import '../widgets/pulsing_dot.dart';
 
 class AudioRoomsScreen extends ConsumerStatefulWidget {
   const AudioRoomsScreen({super.key});
@@ -49,7 +53,7 @@ class _AudioRoomsScreenState extends ConsumerState<AudioRoomsScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
+              padding: AppSpacing.page.copyWith(bottom: AppSpacing.s12),
               child: Column(
                 children: [
                   _buildHeroPanel(isDark),
@@ -70,7 +74,18 @@ class _AudioRoomsScreenState extends ConsumerState<AudioRoomsScreen> {
               child: sessionsAsync.when(
                 data: (sessions) {
                   if (sessions.isEmpty) {
-                    return _EmptyState(isDark: isDark);
+                    return Padding(
+                      padding: AppSpacing.page,
+                      child: AppEmptyState(
+                        icon: Icons.mic_external_on_outlined,
+                        title: 'لا توجد جلسات حالياً',
+                        message:
+                            'عندما تبدأ جلسة أو يتم جدولة جلسات جديدة ستظهر هنا.',
+                        actionLabel: 'تحديث',
+                        onAction: () =>
+                            ref.invalidate(sessionListProvider(selectedStatus)),
+                      ),
+                    );
                   }
 
                   return RefreshIndicator(
@@ -78,7 +93,7 @@ class _AudioRoomsScreenState extends ConsumerState<AudioRoomsScreen> {
                       ref.invalidate(sessionListProvider(selectedStatus));
                     },
                     child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                      padding: AppSpacing.page.copyWith(top: AppSpacing.s8),
                       itemCount: sessions.length,
                       itemBuilder: (context, index) => _SessionCard(
                         item: sessions[index],
@@ -89,16 +104,22 @@ class _AudioRoomsScreenState extends ConsumerState<AudioRoomsScreen> {
                     ),
                   );
                 },
-                loading: () => Center(
-                  child: CircularProgressIndicator(
-                    color: isDark ? AppColors.darkPrimary : AppColors.primary,
+                loading: () => ListView.builder(
+                  padding: AppSpacing.page.copyWith(top: AppSpacing.s8),
+                  itemCount: 3,
+                  itemBuilder: (_, __) => const Padding(
+                    padding: EdgeInsets.only(bottom: AppSpacing.s16),
+                    child: AppSkeletonCard(height: 220),
                   ),
                 ),
-                error: (error, _) => _ErrorState(
-                  isDark: isDark,
-                  message: error.toString().replaceFirst('Exception: ', ''),
-                  onRetry: () =>
-                      ref.invalidate(sessionListProvider(selectedStatus)),
+                error: (error, _) => Padding(
+                  padding: AppSpacing.page,
+                  child: AppErrorState(
+                    title: 'تعذر تحميل الجلسات',
+                    message: error.toString().replaceFirst('Exception: ', ''),
+                    onRetry: () =>
+                        ref.invalidate(sessionListProvider(selectedStatus)),
+                  ),
                 ),
               ),
             ),
@@ -364,7 +385,7 @@ class _SessionCard extends StatelessWidget {
     final visiblePeople = _participantsPreview();
 
     final primaryLabel = item.session.isLive
-        ? (item.access.canJoin ? 'ادخل الغرفة' : 'غير متاح')
+        ? (item.access.canJoin ? 'انضم للبث' : 'غير متاح')
         : 'عرض التفاصيل';
 
     return Padding(
@@ -497,7 +518,7 @@ class _SessionCard extends StatelessWidget {
                       textStyle: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     icon: Icon(item.session.isLive
-                        ? Icons.radio
+                        ? Icons.headphones_outlined
                         : Icons.chevron_left_rounded),
                     label: Text(primaryLabel),
                   ),
@@ -555,14 +576,7 @@ class _SessionCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (label == 'مباشر') ...[
-            Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
-            ),
+            PulsingDot(color: color, size: 7),
             const SizedBox(width: 6),
           ],
           Text(
@@ -709,99 +723,5 @@ class _SessionCard extends StatelessWidget {
       'SUBSCRIPTION_REQUIRED' => 'هذه الجلسة تتطلب اشتراكًا فعالًا.',
       _ => null,
     };
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final bool isDark;
-
-  const _EmptyState({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.mic_none_rounded,
-              size: 48,
-              color: AppColors.appBarForeground(isDark).withAlpha(180),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'لا توجد جلسات مطابقة لهذا الفلتر',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary(isDark),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'جرّب تبديل الفلتر أو أنشئ جلسة جديدة إذا كانت الصلاحية متاحة لك.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary(isDark)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final bool isDark;
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorState({
-    required this.isDark,
-    required this.message,
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.wifi_off_rounded,
-              size: 48,
-              color: AppColors.appBarForeground(isDark).withAlpha(180),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'تعذر تحميل الجلسات',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary(isDark),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.textSecondary(isDark),
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: onRetry,
-              child: const Text('إعادة المحاولة'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_config.dart';
+import '../../core/constants/app_spacing.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/content_library_models.dart';
 import '../providers/content_provider.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/app_segmented_tabs.dart';
+import '../widgets/app_skeleton.dart';
 import 'content_webview_screen.dart';
 import 'program_detail_screen.dart';
 
@@ -26,6 +29,7 @@ class LibraryTrackScreen extends ConsumerStatefulWidget {
 
 class _LibraryTrackScreenState extends ConsumerState<LibraryTrackScreen> {
   String? _selectedContentType;
+  int _tabIndex = 0;
 
   final List<Map<String, String?>> _contentTypeFilters = const [
     {'label': 'الكل', 'value': null},
@@ -66,7 +70,7 @@ class _LibraryTrackScreenState extends ConsumerState<LibraryTrackScreen> {
       body: Container(
         decoration: BoxDecoration(gradient: AppColors.screenGradient(isDark)),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+          padding: AppSpacing.page,
           children: [
             _TrackHero(
               isDark: isDark,
@@ -74,105 +78,125 @@ class _LibraryTrackScreenState extends ConsumerState<LibraryTrackScreen> {
               trackTitle: widget.track.title,
               description: widget.track.description,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AppSpacing.s16),
             _TypeFilterRow(
               isDark: isDark,
               options: _contentTypeFilters,
               selectedValue: _selectedContentType,
               onChanged: (value) => setState(() => _selectedContentType = value),
             ),
-            const SizedBox(height: 18),
-            _SectionHeader(title: 'البرامج', isDark: isDark),
-            programsAsync.when(
-              data: (programs) {
-                if (programs.isEmpty) {
-                  return _InlineEmptyState(isDark: isDark, text: 'لا توجد برامج في هذا المسار');
-                }
-
-                return Column(
-                  children: [
-                    for (final program in programs)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _ProgramCard(
-                          program: program,
-                          isDark: isDark,
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ProgramDetailScreen(program: program),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                );
-              },
-              loading: () => _InlineLoading(isDark: isDark),
-              error: (err, _) => _InlineError(isDark: isDark, text: err.toString()),
+            const SizedBox(height: AppSpacing.s16),
+            AppSegmentedTabs(
+              labels: const ['البرامج', 'المواد'],
+              index: _tabIndex,
+              onChanged: (value) => setState(() => _tabIndex = value),
             ),
-            const SizedBox(height: 18),
-            _SectionHeader(title: 'المواد', isDark: isDark),
-            itemsAsync.when(
-              data: (items) {
-                if (items.isEmpty) {
-                  return _InlineEmptyState(
-                    isDark: isDark,
-                    text: _selectedContentType == null
-                        ? 'لا توجد مواد في هذا المسار'
-                        : 'لا توجد مواد من هذا النوع حالياً',
+            const SizedBox(height: AppSpacing.s16),
+            if (_tabIndex == 0) ...[
+              _SectionHeader(title: 'البرامج', isDark: isDark),
+              programsAsync.when(
+                data: (programs) {
+                  if (programs.isEmpty) {
+                    return _InlineEmptyState(
+                      isDark: isDark,
+                      text: 'لا توجد برامج في هذا المسار',
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      for (final program in programs)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.s12),
+                          child: _ProgramCard(
+                            program: program,
+                            isDark: isDark,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      ProgramDetailScreen(program: program),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
                   );
-                }
+                },
+                loading: () => const _InlineLoading(),
+                error: (err, _) =>
+                    _InlineError(isDark: isDark, text: err.toString()),
+              ),
+            ] else ...[
+              _SectionHeader(title: 'المواد', isDark: isDark),
+              itemsAsync.when(
+                data: (items) {
+                  if (items.isEmpty) {
+                    return _InlineEmptyState(
+                      isDark: isDark,
+                      text: _selectedContentType == null
+                          ? 'لا توجد مواد في هذا المسار'
+                          : 'لا توجد مواد من هذا النوع حالياً',
+                    );
+                  }
 
-                return Column(
-                  children: [
-                    for (final item in items)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _LibraryItemCard(
-                          item: item,
-                          isDark: isDark,
-                          onTap: () {
-                            if (item.isLocked) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('هذا المحتوى مقفل ويتطلب صلاحية مناسبة.'),
+                  return Column(
+                    children: [
+                      for (final item in items)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.s12),
+                          child: _LibraryItemCard(
+                            item: item,
+                            isDark: isDark,
+                            onTap: () {
+                              if (item.isLocked) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'هذا المحتوى مقفل ويتطلب صلاحية مناسبة.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              final url = (item.fileUrl?.isNotEmpty == true)
+                                  ? item.fileUrl!
+                                  : (item.mediaUrl?.isNotEmpty == true)
+                                      ? item.mediaUrl!
+                                      : '';
+
+                              if (url.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'لا يوجد رابط متاح لهذا المحتوى حالياً.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ContentWebViewScreen(
+                                    title: item.title,
+                                    url: url,
+                                  ),
                                 ),
                               );
-                              return;
-                            }
-
-                            final url = (item.fileUrl?.isNotEmpty == true)
-                                ? item.fileUrl!
-                                : (item.mediaUrl?.isNotEmpty == true)
-                                    ? item.mediaUrl!
-                                    : '';
-
-                            if (url.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('لا يوجد رابط متاح لهذا المحتوى حالياً.')),
-                              );
-                              return;
-                            }
-
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ContentWebViewScreen(
-                                  title: item.title,
-                                  url: url,
-                                ),
-                              ),
-                            );
-                          },
+                            },
+                          ),
                         ),
-                      ),
-                  ],
-                );
-              },
-              loading: () => _InlineLoading(isDark: isDark),
-              error: (err, _) => _InlineError(isDark: isDark, text: err.toString()),
-            ),
+                    ],
+                  );
+                },
+                loading: () => const _InlineLoading(),
+                error: (err, _) =>
+                    _InlineError(isDark: isDark, text: err.toString()),
+              ),
+            ],
           ],
         ),
       ),
@@ -584,18 +608,20 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _InlineLoading extends StatelessWidget {
-  final bool isDark;
-
-  const _InlineLoading({required this.isDark});
+  const _InlineLoading();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 22),
-      child: Center(
-        child: CircularProgressIndicator(
-          color: isDark ? AppColors.darkPrimary : AppColors.primary,
-        ),
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.s12),
+      child: Column(
+        children: [
+          AppSkeletonCard(height: 106),
+          SizedBox(height: AppSpacing.s12),
+          AppSkeletonCard(height: 106),
+          SizedBox(height: AppSpacing.s12),
+          AppSkeletonCard(height: 106),
+        ],
       ),
     );
   }

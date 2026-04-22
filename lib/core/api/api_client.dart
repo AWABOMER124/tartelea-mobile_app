@@ -45,30 +45,48 @@ class ApiClient {
     );
   }
 
-  Future<Response> post(String path, {dynamic data, Map<String, dynamic>? queryParameters}) async {
+  Future<Response> post(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    String? contentType,
+  }) async {
     return _requestWithRedirectRetry(
       method: 'POST',
       path: path,
       data: data,
       queryParameters: queryParameters,
+      contentType: contentType,
     );
   }
 
-  Future<Response> put(String path, {dynamic data, Map<String, dynamic>? queryParameters}) async {
+  Future<Response> put(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    String? contentType,
+  }) async {
     return _requestWithRedirectRetry(
       method: 'PUT',
       path: path,
       data: data,
       queryParameters: queryParameters,
+      contentType: contentType,
     );
   }
 
-  Future<Response> delete(String path, {dynamic data, Map<String, dynamic>? queryParameters}) async {
+  Future<Response> delete(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    String? contentType,
+  }) async {
     return _requestWithRedirectRetry(
       method: 'DELETE',
       path: path,
       data: data,
       queryParameters: queryParameters,
+      contentType: contentType,
     );
   }
 
@@ -77,13 +95,14 @@ class ApiClient {
     required String path,
     dynamic data,
     Map<String, dynamic>? queryParameters,
+    String? contentType,
   }) async {
     try {
       return await _dio.request(
         path,
         data: data,
         queryParameters: queryParameters,
-        options: Options(method: method),
+        options: Options(method: method, contentType: contentType),
       );
     } on DioException catch (error) {
       final statusCode = error.response?.statusCode;
@@ -95,7 +114,7 @@ class ApiClient {
         return _dio.requestUri(
           _resolveRedirectUri(location, queryParameters: queryParameters),
           data: data,
-          options: Options(method: method),
+          options: Options(method: method, contentType: contentType),
         );
       }
 

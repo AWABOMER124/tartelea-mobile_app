@@ -14,6 +14,7 @@ import '../providers/auth_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/common_app_bar.dart';
+import '../widgets/pulsing_dot.dart';
 
 class AudioRoomDetailScreen extends ConsumerStatefulWidget {
   final String roomId;
@@ -727,7 +728,7 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
                   ],
                 ),
               ),
-              _statusDot(statusColor),
+              _statusDot(statusColor, pulsing: details.session.status == 'live'),
               const SizedBox(width: 10),
               Icon(
                 details.session.visibility == 'restricted'
@@ -839,7 +840,10 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     SessionDetailsModel details,
     bool userSignedIn,
   ) {
-    final isConnected = _room?.connectionState == lk.ConnectionState.connected;
+    final connectionState = _room?.connectionState;
+    final isConnected = connectionState == lk.ConnectionState.connected;
+    final isConnecting = connectionState == lk.ConnectionState.connecting;
+    final isReconnecting = connectionState == lk.ConnectionState.reconnecting;
     final micEnabled = _room?.localParticipant != null
         ? !(_room!.localParticipant!.isMuted)
         : false;
@@ -861,6 +865,7 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     VoidCallback? primaryAction;
     bool primaryOutlined = true;
     Color primaryColor = isDark ? AppColors.darkPrimary : AppColors.accent;
+    bool primaryBusy = false;
 
     final secondaryButtons = <Widget>[];
 
@@ -872,11 +877,18 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     } else if (details.session.isLive) {
       primaryLabel = isConnected
           ? 'أنت داخل الغرفة'
-          : (_joiningLive
-              ? 'جارٍ تجهيز الدخول'
-              : (_refreshingToken ? 'جارٍ تحديث الصلاحيات' : 'انضم للبث'));
+          : (isReconnecting
+              ? 'إعادة الاتصال…'
+              : (isConnecting
+                  ? 'جارٍ الاتصال…'
+                  : (_joiningLive
+                      ? 'جارٍ تجهيز الدخول'
+                      : (_refreshingToken
+                          ? 'جارٍ تحديث الصلاحيات'
+                          : 'انضم للبث'))));
       primaryIcon = Icons.headphones_outlined;
-      primaryAction = _joiningLive || _refreshingToken || isConnected
+      primaryBusy = _joiningLive || _refreshingToken || isConnecting || isReconnecting;
+      primaryAction = primaryBusy || isConnected
           ? null
           : _joinLiveRoom;
       primaryOutlined = false;
@@ -963,6 +975,20 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
       primaryOutlined = false;
     }
 
+    final busyIndicator = SizedBox(
+      width: 18,
+      height: 18,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: primaryOutlined
+            ? AppColors.appBarForeground(isDark)
+            : Colors.white.withAlpha(230),
+      ),
+    );
+
+    final primaryLeading =
+        primaryBusy ? busyIndicator : Icon(primaryIcon, size: 20);
+
     return _sectionCard(
       isDark: isDark,
       title: 'الإجراءات',
@@ -1020,7 +1046,7 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
             child: primaryOutlined
                 ? OutlinedButton.icon(
                     onPressed: primaryAction,
-                    icon: Icon(primaryIcon, size: 20),
+                    icon: primaryLeading,
                     label: Text(primaryLabel),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.appBarForeground(isDark),
@@ -1033,7 +1059,7 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
                   )
                 : ElevatedButton.icon(
                     onPressed: primaryAction,
-                    icon: Icon(primaryIcon, size: 20),
+                    icon: primaryLeading,
                     label: Text(primaryLabel),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
@@ -1163,14 +1189,16 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
             ),
             const SizedBox(height: 14),
           ],
-          ...details.participants.map(
-            (participant) => Container(
+          ...details.participants.map((participant) {
+            final isActive = activeSpeakerIds.contains(participant.id);
+
+            return Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppColors.subtleFill(isDark),
                 borderRadius: BorderRadius.circular(18),
-                border: activeSpeakerIds.contains(participant.id)
+                border: isActive
                     ? Border.all(color: highlight.withAlpha(200), width: 2)
                     : null,
               ),
@@ -1201,6 +1229,37 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
                                 style: TextStyle(
                                   color: AppColors.textSecondary(isDark),
                                   fontSize: 11,
+                                ),
+                              ),
+                            ],
+                            if (isActive) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: highlight.withAlpha(22),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: highlight.withAlpha(120),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    PulsingDot(color: highlight, size: 7),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'يتحدث',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.textPrimary(isDark),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -1247,8 +1306,8 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
                     ),
                 ],
               ),
-            ),
-          ),
+            );
+          }),
         ],
       ),
     );
@@ -1381,21 +1440,11 @@ class _AudioRoomDetailScreenState extends ConsumerState<AudioRoomDetailScreen> {
     );
   }
 
-  Widget _statusDot(Color color) {
-    return Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: color.withAlpha(120),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
+  Widget _statusDot(Color color, {bool pulsing = false}) {
+    return PulsingDot(
+      color: color,
+      size: 10,
+      enabled: pulsing,
     );
   }
 

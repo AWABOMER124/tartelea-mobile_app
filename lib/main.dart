@@ -13,6 +13,7 @@ import 'presentation/screens/community_post_detail_screen.dart';
 import 'presentation/screens/community_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/library_screen.dart';
+import 'presentation/screens/notifications_screen.dart';
 import 'presentation/screens/pricing_screen.dart';
 import 'presentation/screens/workshops_screen.dart';
 
@@ -75,6 +76,10 @@ final _router = GoRouter(
       builder: (context, state) => CommunityPostDetailScreen(
         postId: state.pathParameters['postId'] ?? '',
       ),
+    ),
+    GoRoute(
+      path: '/notifications',
+      builder: (context, state) => const NotificationsScreen(),
     ),
   ],
 );

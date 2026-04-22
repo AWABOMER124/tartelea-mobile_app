@@ -23,27 +23,76 @@ class AppTheme {
     );
 
     final textTheme = GoogleFonts.cairoTextTheme(base.textTheme).copyWith(
-      headlineMedium: GoogleFonts.amiri(
-        fontSize: 30,
+      headlineLarge: GoogleFonts.amiri(
+        fontSize: 34,
         fontWeight: FontWeight.w700,
+        height: 1.12,
         color: AppColors.foreground,
       ),
-      titleLarge: GoogleFonts.amiri(
-        fontSize: 24,
+      headlineMedium: GoogleFonts.amiri(
+        fontSize: 28,
         fontWeight: FontWeight.w700,
+        height: 1.15,
+        color: AppColors.foreground,
+      ),
+      headlineSmall: GoogleFonts.amiri(
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+        color: AppColors.foreground,
+      ),
+      titleLarge: GoogleFonts.cairo(
+        fontSize: 18,
+        fontWeight: FontWeight.w800,
+        height: 1.25,
+        color: AppColors.foreground,
+      ),
+      titleMedium: GoogleFonts.cairo(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        height: 1.3,
+        color: AppColors.foreground,
+      ),
+      titleSmall: GoogleFonts.cairo(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        height: 1.35,
         color: AppColors.foreground,
       ),
       bodyLarge: GoogleFonts.cairo(
         fontSize: 16,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
+        height: 1.7,
         color: AppColors.foreground,
       ),
       bodyMedium: GoogleFonts.cairo(
         fontSize: 14,
+        fontWeight: FontWeight.w500,
+        height: 1.7,
         color: AppColors.foreground,
       ),
       bodySmall: GoogleFonts.cairo(
         fontSize: 12,
+        fontWeight: FontWeight.w500,
+        height: 1.6,
+        color: AppColors.mutedForeground,
+      ),
+      labelLarge: GoogleFonts.cairo(
+        fontSize: 14,
+        fontWeight: FontWeight.w800,
+        height: 1.2,
+        color: AppColors.foreground,
+      ),
+      labelMedium: GoogleFonts.cairo(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+        color: AppColors.foreground,
+      ),
+      labelSmall: GoogleFonts.cairo(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
         color: AppColors.mutedForeground,
       ),
     );
@@ -55,7 +104,7 @@ class AppTheme {
         foregroundColor: AppColors.primary,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: textTheme.titleLarge,
+        titleTextStyle: textTheme.headlineSmall,
       ),
       cardTheme: CardThemeData(
         color: AppColors.card,
@@ -94,10 +143,7 @@ class AppTheme {
             borderRadius: BorderRadius.circular(18),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
-          textStyle: GoogleFonts.cairo(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-          ),
+          textStyle: textTheme.labelLarge,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -109,6 +155,28 @@ class AppTheme {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.subtleFill(false),
+        selectedColor: AppColors.subtleFill(false),
+        disabledColor: AppColors.muted,
+        side: const BorderSide(color: AppColors.border),
+        labelStyle: textTheme.labelMedium?.copyWith(color: AppColors.foreground),
+        secondaryLabelStyle:
+            textTheme.labelMedium?.copyWith(color: AppColors.foreground),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(999),
+          side: const BorderSide(color: AppColors.border),
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.border,
+        thickness: 1,
+        space: 1,
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.primary,
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.primary,
@@ -148,27 +216,76 @@ class AppTheme {
     );
 
     final textTheme = GoogleFonts.cairoTextTheme(base.textTheme).copyWith(
-      headlineMedium: GoogleFonts.amiri(
-        fontSize: 30,
+      headlineLarge: GoogleFonts.amiri(
+        fontSize: 34,
         fontWeight: FontWeight.w700,
+        height: 1.12,
         color: AppColors.darkForeground,
       ),
-      titleLarge: GoogleFonts.amiri(
-        fontSize: 24,
+      headlineMedium: GoogleFonts.amiri(
+        fontSize: 28,
         fontWeight: FontWeight.w700,
+        height: 1.15,
+        color: AppColors.darkForeground,
+      ),
+      headlineSmall: GoogleFonts.amiri(
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+        color: AppColors.darkForeground,
+      ),
+      titleLarge: GoogleFonts.cairo(
+        fontSize: 18,
+        fontWeight: FontWeight.w800,
+        height: 1.25,
+        color: AppColors.darkForeground,
+      ),
+      titleMedium: GoogleFonts.cairo(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        height: 1.3,
+        color: AppColors.darkForeground,
+      ),
+      titleSmall: GoogleFonts.cairo(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        height: 1.35,
         color: AppColors.darkForeground,
       ),
       bodyLarge: GoogleFonts.cairo(
         fontSize: 16,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
+        height: 1.7,
         color: AppColors.darkForeground,
       ),
       bodyMedium: GoogleFonts.cairo(
         fontSize: 14,
+        fontWeight: FontWeight.w500,
+        height: 1.7,
         color: AppColors.darkForeground,
       ),
       bodySmall: GoogleFonts.cairo(
         fontSize: 12,
+        fontWeight: FontWeight.w500,
+        height: 1.6,
+        color: AppColors.darkMutedForeground,
+      ),
+      labelLarge: GoogleFonts.cairo(
+        fontSize: 14,
+        fontWeight: FontWeight.w800,
+        height: 1.2,
+        color: AppColors.darkForeground,
+      ),
+      labelMedium: GoogleFonts.cairo(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+        color: AppColors.darkForeground,
+      ),
+      labelSmall: GoogleFonts.cairo(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
         color: AppColors.darkMutedForeground,
       ),
     );
@@ -180,7 +297,7 @@ class AppTheme {
         foregroundColor: AppColors.darkForeground,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: textTheme.titleLarge,
+        titleTextStyle: textTheme.headlineSmall,
       ),
       cardTheme: CardThemeData(
         color: AppColors.darkCard,
@@ -219,10 +336,7 @@ class AppTheme {
             borderRadius: BorderRadius.circular(18),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
-          textStyle: GoogleFonts.cairo(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-          ),
+          textStyle: textTheme.labelLarge,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -234,6 +348,29 @@ class AppTheme {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.subtleFill(true),
+        selectedColor: AppColors.subtleFill(true),
+        disabledColor: AppColors.darkMuted,
+        side: const BorderSide(color: AppColors.darkBorder),
+        labelStyle:
+            textTheme.labelMedium?.copyWith(color: AppColors.darkForeground),
+        secondaryLabelStyle:
+            textTheme.labelMedium?.copyWith(color: AppColors.darkForeground),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(999),
+          side: const BorderSide(color: AppColors.darkBorder),
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.darkBorder,
+        thickness: 1,
+        space: 1,
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.darkPrimary,
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.darkCard,
