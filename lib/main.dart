@@ -11,11 +11,14 @@ import 'presentation/screens/audio_rooms_screen.dart';
 import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/community_post_detail_screen.dart';
 import 'presentation/screens/community_screen.dart';
+import 'presentation/screens/edit_profile_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/library_screen.dart';
 import 'presentation/screens/notifications_screen.dart';
 import 'presentation/screens/pricing_screen.dart';
+import 'presentation/screens/settings_screen.dart';
 import 'presentation/screens/workshops_screen.dart';
+import 'presentation/widgets/splash_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -81,6 +84,14 @@ final _router = GoRouter(
       path: '/notifications',
       builder: (context, state) => const NotificationsScreen(),
     ),
+    GoRoute(
+      path: '/profile/edit',
+      builder: (context, state) => const EditProfileScreen(),
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsScreen(),
+    ),
   ],
 );
 
@@ -99,9 +110,11 @@ class TarteleaApp extends ConsumerWidget {
       themeMode: themeMode,
       routerConfig: _router,
       builder: (context, child) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: child ?? const SizedBox.shrink(),
+        return SplashGate(
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
     );
