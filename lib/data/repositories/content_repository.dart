@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../core/api/api_client.dart';
 import '../../core/api/api_config.dart';
 import '../../core/api/api_payload.dart';
@@ -10,15 +12,21 @@ class ContentRepository {
 
   Future<List<ContentCategoryModel>> getCategories() async {
     try {
-      final response = await _api.get(
-        ApiConfig.contentCategories,
-      );
-
-      return ApiPayload.unwrapList(response.data)
+      final response = await _api.get(ApiConfig.contentCategories);
+      final categories = ApiPayload.unwrapList(response.data)
           .map((json) => ContentCategoryModel.fromJson(json))
           .toList();
-    } catch (_) {
-      return [];
+
+      if (kDebugMode) {
+        debugPrint('ContentRepository.getCategories: ${categories.length}');
+      }
+
+      return categories;
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('ContentRepository.getCategories failed: $error');
+      }
+      rethrow;
     }
   }
 
@@ -32,21 +40,38 @@ class ContentRepository {
         },
       );
 
-      return ApiPayload.unwrapList(response.data)
+      final tracks = ApiPayload.unwrapList(response.data)
           .map((json) => ContentTrackModel.fromJson(json))
           .toList();
-    } catch (_) {
-      return [];
+
+      if (kDebugMode) {
+        debugPrint(
+          'ContentRepository.getTracks(${categorySlug ?? 'all'}): ${tracks.length}',
+        );
+      }
+
+      return tracks;
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('ContentRepository.getTracks failed: $error');
+      }
+      rethrow;
     }
   }
 
   Future<ContentFeaturedResponse?> getFeatured() async {
     try {
       final response = await _api.get(ApiConfig.featuredContent);
+      if (kDebugMode) {
+        debugPrint('ContentRepository.getFeatured: ok');
+      }
       return ContentFeaturedResponse.fromJson(
         ApiPayload.unwrapObject(response.data),
       );
-    } catch (_) {
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('ContentRepository.getFeatured failed: $error');
+      }
       return null;
     }
   }
@@ -70,11 +95,22 @@ class ContentRepository {
         },
       );
 
-      return ApiPayload.unwrapList(response.data)
+      final items = ApiPayload.unwrapList(response.data)
           .map((json) => LibraryItemModel.fromJson(json))
           .toList();
-    } catch (_) {
-      return [];
+
+      if (kDebugMode) {
+        debugPrint(
+          'ContentRepository.getLibraryItems(category=$categorySlug track=$trackSlug type=$contentType featured=$featured): ${items.length}',
+        );
+      }
+
+      return items;
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('ContentRepository.getLibraryItems failed: $error');
+      }
+      rethrow;
     }
   }
 
@@ -94,22 +130,44 @@ class ContentRepository {
         },
       );
 
-      return ApiPayload.unwrapList(response.data)
+      final programs = ApiPayload.unwrapList(response.data)
           .map((json) => ProgramModel.fromJson(json))
           .toList();
-    } catch (_) {
-      return [];
+
+      if (kDebugMode) {
+        debugPrint(
+          'ContentRepository.getPrograms(category=$categorySlug track=$trackSlug featured=$featured): ${programs.length}',
+        );
+      }
+
+      return programs;
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('ContentRepository.getPrograms failed: $error');
+      }
+      rethrow;
     }
   }
 
   Future<List<ProgramLessonModel>> getProgramLessons(String programId) async {
     try {
       final response = await _api.get(ApiConfig.programLessons(programId));
-      return ApiPayload.unwrapList(response.data)
+      final lessons = ApiPayload.unwrapList(response.data)
           .map((json) => ProgramLessonModel.fromJson(json))
           .toList();
-    } catch (_) {
-      return [];
+
+      if (kDebugMode) {
+        debugPrint(
+          'ContentRepository.getProgramLessons($programId): ${lessons.length}',
+        );
+      }
+
+      return lessons;
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('ContentRepository.getProgramLessons failed: $error');
+      }
+      rethrow;
     }
   }
 }

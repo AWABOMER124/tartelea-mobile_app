@@ -68,9 +68,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               const SizedBox(height: AppSpacing.s12),
               categoriesAsync.when(
                 data: (categories) {
-                  _maybeOpenInitialCategory(context, categories);
+                  final validCategories = categories
+                      .where(
+                        (c) =>
+                            c.title.trim().isNotEmpty &&
+                            c.slug.trim().isNotEmpty,
+                      )
+                      .toList();
 
-                  if (categories.isEmpty) {
+                  _maybeOpenInitialCategory(context, validCategories);
+
+                  if (validCategories.isEmpty) {
                     return AppEmptyState(
                       icon: Icons.menu_book_outlined,
                       title: 'لا يوجد محتوى بعد',
@@ -83,7 +91,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   return GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: categories.length,
+                    itemCount: validCategories.length,
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       mainAxisSpacing: AppSpacing.s12,
@@ -91,7 +99,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       childAspectRatio: 0.92,
                     ),
                     itemBuilder: (context, index) {
-                      final category = categories[index];
+                      final category = validCategories[index];
                       return _CategoryTile(
                         category: category,
                         index: index,

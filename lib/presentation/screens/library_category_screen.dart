@@ -63,7 +63,11 @@ class _LibraryCategoryScreenState extends ConsumerState<LibraryCategoryScreen> {
               ),
             tracksAsync.when(
               data: (tracks) {
-                if (tracks.isEmpty) return const SizedBox.shrink();
+                final validTracks = tracks
+                    .where((t) => t.title.trim().isNotEmpty && t.slug.trim().isNotEmpty)
+                    .toList();
+
+                if (validTracks.isEmpty) return const SizedBox.shrink();
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,7 +82,7 @@ class _LibraryCategoryScreenState extends ConsumerState<LibraryCategoryScreen> {
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: tracks.length,
+                      itemCount: validTracks.length,
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         mainAxisSpacing: AppSpacing.s12,
@@ -86,7 +90,7 @@ class _LibraryCategoryScreenState extends ConsumerState<LibraryCategoryScreen> {
                         childAspectRatio: 1.18,
                       ),
                       itemBuilder: (context, index) {
-                        final track = tracks[index];
+                        final track = validTracks[index];
                         return _TrackCard(
                           track: track,
                           isDark: isDark,

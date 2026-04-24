@@ -138,7 +138,15 @@ class _IndexScreenState extends ConsumerState<IndexScreen> {
                             const SizedBox(height: AppSpacing.s12),
                             categoriesAsync.when(
                               data: (categories) {
-                                if (categories.isEmpty) {
+                                final validCategories = categories
+                                    .where(
+                                      (c) =>
+                                          c.title.trim().isNotEmpty &&
+                                          c.slug.trim().isNotEmpty,
+                                    )
+                                    .toList();
+
+                                if (validCategories.isEmpty) {
                                   return const AppInlineBanner(
                                     icon: Icons.menu_book_outlined,
                                     title: 'لا يوجد محتوى بعد',
@@ -154,11 +162,11 @@ class _IndexScreenState extends ConsumerState<IndexScreen> {
                                       height: 124,
                                       child: ListView.separated(
                                         scrollDirection: Axis.horizontal,
-                                        itemCount: categories.length,
+                                        itemCount: validCategories.length,
                                         separatorBuilder: (_, __) =>
                                             const SizedBox(width: AppSpacing.s12),
                                         itemBuilder: (context, index) {
-                                          final category = categories[index];
+                                          final category = validCategories[index];
                                           return _CategoryMiniCard(
                                             category: category,
                                             index: index,
@@ -169,9 +177,9 @@ class _IndexScreenState extends ConsumerState<IndexScreen> {
                                     ),
                                     const SizedBox(height: AppSpacing.s20),
                                     _TracksSection(
-                                      categories: categories,
+                                      categories: validCategories,
                                       selectedCategorySlug: _tracksCategorySlug ??
-                                          _preferredTracksCategorySlug(categories),
+                                          _preferredTracksCategorySlug(validCategories),
                                       onCategorySelected: (slug) => setState(() {
                                         _tracksCategorySlug = slug;
                                       }),
@@ -633,7 +641,11 @@ class _TracksSection extends ConsumerWidget {
         const SizedBox(height: AppSpacing.s12),
         tracksAsync.when(
           data: (tracks) {
-            if (tracks.isEmpty) {
+            final validTracks = tracks
+                .where((t) => t.title.trim().isNotEmpty && t.slug.trim().isNotEmpty)
+                .toList();
+
+            if (validTracks.isEmpty) {
               return const AppInlineBanner(
                 icon: Icons.route_outlined,
                 title: 'لا توجد مسارات حالياً',
@@ -645,10 +657,10 @@ class _TracksSection extends ConsumerWidget {
               height: 116,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: tracks.length,
+                itemCount: validTracks.length,
                 separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.s12),
                 itemBuilder: (context, index) {
-                  final track = tracks[index];
+                  final track = validTracks[index];
                   return _TrackMiniCard(
                     category: selectedCategory,
                     track: track,
