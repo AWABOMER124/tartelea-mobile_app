@@ -19,11 +19,13 @@ class ApiClient {
     ));
 
     if (kDebugMode) {
+      // Keep debug networking useful without printing credentials, passwords,
+      // OAuth tokens, reset codes, or response payloads containing user data.
       _dio.interceptors.add(LogInterceptor(
-        requestHeader: true,
-        requestBody: true,
-        responseHeader: true,
-        responseBody: true,
+        requestHeader: false,
+        requestBody: false,
+        responseHeader: false,
+        responseBody: false,
         error: true,
       ));
     }
@@ -111,8 +113,22 @@ class ApiClient {
       if ((statusCode == 301 || statusCode == 302 || statusCode == 307 || statusCode == 308) &&
           location != null &&
           location.isNotEmpty) {
+        final redirectUri = _resolveRedirectUri(
+          location,
+          queryParameters: queryParameters,
+        );
+
+        if (!_isTrustedRedirect(redirectUri)) {
+          throw DioException(
+            requestOptions: error.requestOptions,
+            response: error.response,
+            type: DioExceptionType.badResponse,
+            error: 'Refusing to forward an authenticated request to an untrusted redirect.',
+          );
+        }
+
         return _dio.requestUri(
-          _resolveRedirectUri(location, queryParameters: queryParameters),
+          redirectUri,
           data: data,
           options: Options(method: method, contentType: contentType),
         );
@@ -120,6 +136,13 @@ class ApiClient {
 
       rethrow;
     }
+  }
+
+  bool _isTrustedRedirect(Uri redirectUri) {
+    final baseUri = Uri.parse(_dio.options.baseUrl);
+    return redirectUri.scheme == baseUri.scheme &&
+        redirectUri.host == baseUri.host &&
+        redirectUri.port == baseUri.port;
   }
 
   Uri _resolveRedirectUri(
