@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/api/api_client.dart';
@@ -20,6 +21,7 @@ class AuthRepositoryImpl implements AuthRepository {
   );
 
   static const _tokenKey = 'auth_token';
+  static const _secureStorage = FlutterSecureStorage();
 
   AuthRepositoryImpl(this._api);
 
@@ -140,6 +142,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> signOut() async {
+    await _secureStorage.delete(key: _tokenKey);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     _api.setToken(null);
@@ -201,16 +204,30 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<bool> hasActiveSession() async {
+    final secureToken = await _secureStorage.read(key: _tokenKey);
+    if (secureToken != null && secureToken.isNotEmpty) {
+      _api.setToken(secureToken);
+      return true;
+    }
+
+    // One-time migration for users upgrading from legacy SharedPreferences storage.
     final prefs = await SharedPreferences.getInstance();
-    return prefs.containsKey(_tokenKey);
+    final legacyToken = prefs.getString(_tokenKey);
+    if (legacyToken == null || legacyToken.isEmpty) return false;
+
+    await _secureStorage.write(key: _tokenKey, value: legacyToken);
+    await prefs.remove(_tokenKey);
+    _api.setToken(legacyToken);
+    return true;
   }
 
   @override
   Stream<AppUser?> watchAuthState() => _authStateController.stream;
 
   Future<void> _saveToken(String token) async {
+    await _secureStorage.write(key: _tokenKey, value: token);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
+    await prefs.remove(_tokenKey);
     _api.setToken(token);
   }
 
