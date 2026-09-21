@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
@@ -206,6 +207,10 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<bool> hasActiveSession() async {
     final secureToken = await _secureStorage.read(key: _tokenKey);
     if (secureToken != null && secureToken.isNotEmpty) {
+      if (_isTokenExpired(secureToken)) {
+        await _clearStoredToken();
+        return false;
+      }
       _api.setToken(secureToken);
       return true;
     }
@@ -215,6 +220,11 @@ class AuthRepositoryImpl implements AuthRepository {
     final legacyToken = prefs.getString(_tokenKey);
     if (legacyToken == null || legacyToken.isEmpty) return false;
 
+    if (_isTokenExpired(legacyToken)) {
+      await prefs.remove(_tokenKey);
+      return false;
+    }
+
     await _secureStorage.write(key: _tokenKey, value: legacyToken);
     await prefs.remove(_tokenKey);
     _api.setToken(legacyToken);
@@ -223,6 +233,28 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Stream<AppUser?> watchAuthState() => _authStateController.stream;
+
+  Future<void> _clearStoredToken() async {
+    await _secureStorage.delete(key: _tokenKey);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+    _api.setToken(null);
+  }
+
+  static bool _isTokenExpired(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return true;
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+      final exp = payload is Map<String, dynamic> ? payload['exp'] : null;
+      if (exp is! num) return true;
+      return DateTime.now().millisecondsSinceEpoch >= exp.toInt() * 1000;
+    } catch (_) {
+      return true;
+    }
+  }
 
   Future<void> _saveToken(String token) async {
     await _secureStorage.write(key: _tokenKey, value: token);
