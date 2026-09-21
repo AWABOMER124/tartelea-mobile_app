@@ -11,10 +11,12 @@ class ApiConfig {
     'LIVEKIT_API_BASE_URL',
     defaultValue: defaultLivekitBaseUrl,
   );
+  // Web OAuth client ID used as the serverClientId by google_sign_in.
+  // Configure it explicitly per build; do not silently couple releases to a
+  // client ID committed in source.
   static const String googleServerClientId = String.fromEnvironment(
     'GOOGLE_SERVER_CLIENT_ID',
-    defaultValue:
-        '199107182598-d9b1anek3f57ij2427c14h8d05blfg3e.apps.googleusercontent.com',
+    defaultValue: '',
   );
   static const bool subscriptionsPaused = bool.fromEnvironment(
     'SUBSCRIPTIONS_PAUSED',
