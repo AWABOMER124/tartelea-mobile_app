@@ -66,12 +66,10 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                // A release APK is still installable without committing a keystore.
-                // Dokploy/CI should provide `android/key.properties` + a `.jks` via secrets for production signing.
-                signingConfigs.getByName("debug")
+            // Never ship a production artifact signed with the debug key.
+            // CI/release environments must provide android/key.properties + the referenced .jks.
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }
